@@ -58,9 +58,9 @@ test = [
 moneywiz-mcp-server = "moneywiz_mcp_server.server:cli_main"
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/moneywiz-mcp-server"
-"Bug Reports" = "https://github.com/yourusername/moneywiz-mcp-server/issues"
-"Source" = "https://github.com/yourusername/moneywiz-mcp-server"
+"Homepage" = "https://github.com/jcvalerio/moneywiz-mcp-server"
+"Bug Reports" = "https://github.com/jcvalerio/moneywiz-mcp-server/issues"
+"Source" = "https://github.com/jcvalerio/moneywiz-mcp-server"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,6 +1,5 @@
 """Database connection management for MoneyWiz SQLite database."""
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -56,11 +55,14 @@ class DatabaseManager:
             self._api = None
         else:
             try:
-                self._api = MoneywizApi(str(self.db_path))
+                # MoneywizApi expects a Path object, not a string
+                self._api = MoneywizApi(self.db_path)
                 logger.debug("MoneywizApi initialized successfully")
             except Exception as e:
-                logger.warning(f"Failed to initialize MoneywizApi: {e}")
+                # Log the full error details for debugging
+                logger.warning(f"Failed to initialize MoneywizApi: {type(e).__name__}: {str(e)}")
                 logger.info("Continuing with direct SQLite access only")
+                logger.info("This may be due to database schema changes in the latest MoneyWiz version")
                 self._api = None
         
         # Initialize async SQLite connection

@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional, List
 from dataclasses import dataclass
 
+from .utils.env_loader import load_env_file
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +24,7 @@ class Config:
     
     @classmethod
     def from_env(cls) -> 'Config':
-        """Load configuration from environment variables.
+        """Load configuration from environment variables and .env file.
         
         Environment Variables:
             MONEYWIZ_DB_PATH: Path to MoneyWiz SQLite database
@@ -37,7 +39,18 @@ class Config:
             
         Raises:
             ValueError: If MoneyWiz database cannot be found
+            OSError: If not running on macOS
         """
+        # Verify platform first
+        if os.name != 'posix' or os.uname().sysname != 'Darwin':
+            raise OSError(
+                "MoneyWiz MCP Server only supports macOS. "
+                "MoneyWiz is only available on macOS, iOS, and iPadOS."
+            )
+        
+        # Load environment variables from .env file first
+        load_env_file()
+        
         # Get database path from environment or auto-detect
         db_path = os.getenv('MONEYWIZ_DB_PATH')
         
@@ -60,7 +73,7 @@ class Config:
         backup_before_write = os.getenv('BACKUP_BEFORE_WRITE', 'true').lower() == 'true'
         log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
         
-        logger.info(f"Configuration loaded:")
+        logger.info("Configuration loaded:")
         logger.info(f"  Database: {db_path}")
         logger.info(f"  Read-only: {read_only}")
         logger.info(f"  Cache TTL: {cache_ttl}s")
@@ -77,49 +90,28 @@ class Config:
     
     @classmethod
     def _find_moneywiz_database(cls) -> Optional[str]:
-        """Attempt to auto-detect MoneyWiz database location.
+        """Attempt to auto-detect MoneyWiz database location on macOS.
         
-        Searches common MoneyWiz installation locations on different platforms.
+        Searches common MoneyWiz installation locations on macOS only.
         
         Returns:
             Path to database file if found, None otherwise
         """
-        possible_paths = []
+        # Verify we're running on macOS
+        if os.name != 'posix' or os.uname().sysname != 'Darwin':
+            logger.error("MoneyWiz MCP Server only supports macOS")
+            raise OSError("This application only runs on macOS where MoneyWiz is available")
         
-        # macOS locations
-        if os.name == 'posix' and os.uname().sysname == 'Darwin':
-            home = Path.home()
-            possible_paths.extend([
-                # MoneyWiz 3 locations
-                home / "Library/Containers/com.moneywiz.mac/Data/Documents",
-                home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
-                home / "Library/Application Support/MoneyWiz",
-                # MoneyWiz 2 locations  
-                home / "Library/Application Support/SilverWiz/MoneyWiz 2",
-                # Common user locations
-                home / "Documents/MoneyWiz",
-                home / "Desktop/MoneyWiz",
-            ])
-        
-        # Windows locations
-        elif os.name == 'nt':
-            home = Path.home()
-            possible_paths.extend([
-                home / "AppData/Local/SilverWiz/MoneyWiz",
-                home / "AppData/Roaming/SilverWiz/MoneyWiz",
-                home / "Documents/MoneyWiz",
-                home / "Desktop/MoneyWiz",
-            ])
-        
-        # Linux locations
-        else:
-            home = Path.home()
-            possible_paths.extend([
-                home / ".config/MoneyWiz",
-                home / ".local/share/MoneyWiz",
-                home / "Documents/MoneyWiz",
-                home / "Desktop/MoneyWiz",
-            ])
+        home = Path.home()
+        possible_paths = [
+            # MoneyWiz 3 locations (including Setapp version)
+            home / "Library/Containers/com.moneywiz.mac/Data/Documents",
+            home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
+            home / "Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents",
+            home / "Library/Application Support/MoneyWiz",
+            # MoneyWiz 2 locations  
+            home / "Library/Application Support/SilverWiz/MoneyWiz 2",
+        ]
         
         # Search for SQLite database files
         for base_path in possible_paths:
@@ -143,15 +135,8 @@ class Config:
                         logger.info(f"Found potential MoneyWiz database: {db_file}")
                         return str(db_file)
         
-        # Also check current directory and common locations
-        current_dir = Path.cwd()
-        for pattern in ["*.sqlite", "*.sqlite3", "MoneyWiz*.db"]:
-            for db_file in current_dir.glob(pattern):
-                if db_file.is_file():
-                    logger.info(f"Found database in current directory: {db_file}")
-                    return str(db_file)
-        
         logger.warning("Could not auto-detect MoneyWiz database location")
+        logger.info("Please set MONEYWIZ_DB_PATH environment variable or run setup_env.py")
         return None
     
     def validate(self) -> bool:

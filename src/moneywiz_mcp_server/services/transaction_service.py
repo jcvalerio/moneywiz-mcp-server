@@ -268,17 +268,37 @@ class TransactionService:
             Enhanced transaction model
         """
         try:
-            # Get category name if category_id exists
-            if transaction.category_id and transaction.category_id not in self._category_cache:
-                category_query = "SELECT ZNAME FROM ZSYNCOBJECT WHERE Z_ENT = 19 AND Z_PK = ?"
-                category_result = await self.db_manager.execute_query(category_query, (transaction.category_id,))
-                if category_result:
-                    self._category_cache[transaction.category_id] = category_result[0]["ZNAME"]
-                else:
-                    self._category_cache[transaction.category_id] = "Unknown Category"
+            # Get category from ZCATEGORYASSIGMENT table
+            # MoneyWiz uses a separate table to link transactions to categories
+            category_assignment_query = """
+            SELECT ca.ZCATEGORY
+            FROM ZCATEGORYASSIGMENT ca
+            WHERE ca.ZTRANSACTION = ?
+            LIMIT 1
+            """
             
-            if transaction.category_id:
-                transaction.category = self._category_cache.get(transaction.category_id, "Unknown Category")
+            category_assignment = await self.db_manager.execute_query(
+                category_assignment_query, 
+                (int(transaction.id),)
+            )
+            
+            if category_assignment:
+                category_id = category_assignment[0]["ZCATEGORY"]
+                
+                # Get category name if not cached
+                if category_id not in self._category_cache:
+                    category_query = "SELECT ZNAME2 FROM ZSYNCOBJECT WHERE Z_ENT = 19 AND Z_PK = ?"
+                    category_result = await self.db_manager.execute_query(category_query, (category_id,))
+                    if category_result and category_result[0]["ZNAME2"]:
+                        self._category_cache[category_id] = category_result[0]["ZNAME2"]
+                    else:
+                        self._category_cache[category_id] = "Unknown Category"
+                
+                transaction.category = self._category_cache.get(category_id, "Uncategorized")
+                transaction.category_id = category_id
+            else:
+                transaction.category = "Uncategorized"
+                transaction.category_id = None
             
             # Get payee name if payee_id exists
             if transaction.payee_id and transaction.payee_id not in self._payee_cache:

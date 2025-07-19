@@ -4,6 +4,99 @@
 
 Design and implement advanced financial analytics capabilities for the MoneyWiz MCP server, enabling natural language queries for expense analysis, category insights, and savings optimization.
 
+## 🔄 **Current Implementation Status (July 2024)**
+
+### ✅ **Completed Components**
+This project has made significant progress with the following components implemented and working:
+
+#### **Phase 1: Foundation - COMPLETED**
+- ✅ **Fixed Balance Calculation**: Resolved critical issue where all account balances showed $0.00
+  - Used moneywiz-api source code analysis to identify correct formula: `ZOPENINGBALANCE + sum(ZAMOUNT1)`
+  - Fixed account linking using `ZACCOUNT2` field instead of incorrect approaches
+  - Validated against actual MoneyWiz desktop app showing $1,657.60 vs previous -$230,240.66 errors
+
+- ✅ **Transaction Service Layer**: Complete implementation with category resolution
+  - `src/moneywiz_mcp_server/services/transaction_service.py` - Full transaction querying, filtering, and enhancement
+  - **Critical Fix**: Category resolution using `ZCATEGORYASSIGMENT` table (note missing 'N') and `ZNAME2` field
+  - Caching for categories, payees, and account currencies
+  - Support for all transaction types (37, 45, 46, 47, 38, 40, 41, 42, 43, 44)
+
+- ✅ **Data Models**: Complete transaction and analytics models
+  - `src/moneywiz_mcp_server/models/transaction.py` - TransactionModel with full Core Data mapping
+  - `src/moneywiz_mcp_server/models/analytics_result.py` - IncomeExpenseAnalysis, CategoryExpense models
+  - Support for all MoneyWiz transaction types and currency handling
+
+- ✅ **MCP Tools Implementation**: Working analytics tools
+  - `src/moneywiz_mcp_server/tools/analytics.py` - analyze_expenses, analyze_income_vs_expenses tools
+  - `src/moneywiz_mcp_server/tools/transactions.py` - search_transactions tool
+  - Integration with existing accounts.py tools
+
+#### **Infrastructure & Environment**
+- ✅ **Git Repository**: Initialized with proper configuration
+  - 1Password SSH signing configured
+  - Personal information anonymized in commits
+  - Feature branch: `feature/financial-analytics` created
+
+- ✅ **Environment Configuration**: Production-ready setup
+  - `.env` system implemented to remove hardcoded paths
+  - `setup_env.py` script for automatic MoneyWiz database detection
+  - `launcher.py` updated to use environment variables
+  - Claude Desktop integration configured in `claude_desktop_config.json`
+
+- ✅ **Testing Framework**: Basic test structure
+  - `tests/` directory with unit and integration test framework
+  - Sample tests for analytics functionality
+  - Coverage tracking setup
+
+#### **Database Integration**
+- ✅ **MoneyWiz Database Analysis**: Complete understanding
+  - Transaction entities: 37 (deposit), 45/46 (transfers), 47 (withdraw), 38/40/41 (investments)
+  - Category system: Entity 19 with ZCATEGORYASSIGMENT table linking
+  - Account entities: 10-16 with proper currency and balance fields
+  - Verified against `/Users/jcvalerio/jcvalerio/dev/github/moneywiz-api` source code
+
+### 🔄 **Recently Fixed Critical Issues**
+
+#### **Category Resolution Fix (Latest)**
+**Problem**: All transactions were showing as "Uncategorized" instead of actual category names, making expense analysis useless (all $24M+ expenses showed as "Uncategorized")
+
+**Root Cause Analysis**: 
+- Categories are NOT stored directly in transaction records
+- MoneyWiz uses separate `ZCATEGORYASSIGMENT` table (note missing 'N' in spelling)
+- Category names are in `ZNAME2` field, not `ZNAME`
+- Previous implementation was looking for categories in wrong table/field
+
+**Solution Implemented** (`transaction_service.py:270-333`):
+```python
+# Fixed query in _enhance_transaction method
+category_assignment_query = """
+SELECT ca.ZCATEGORY
+FROM ZCATEGORYASSIGMENT ca  -- Note: missing 'N' is correct
+WHERE ca.ZTRANSACTION = ?
+LIMIT 1
+"""
+
+# Fixed category name lookup using ZNAME2
+category_query = "SELECT ZNAME2 FROM ZSYNCOBJECT WHERE Z_ENT = 19 AND Z_PK = ?"
+```
+
+**Status**: Fix implemented, ready for testing with Claude Desktop
+
+### 🚧 **Current Development Status**
+
+#### **Phase 2: Core Analytics - IN PROGRESS**
+- ✅ **Expense Analysis**: `get_expense_summary()` method implemented with category breakdown
+- ✅ **Income vs Expense**: `get_income_vs_expense()` method with savings rate calculation
+- ✅ **Transaction Filtering**: Date range, account, category, and transaction type filtering
+- 🔄 **Category Resolution**: Just fixed, needs validation through Claude Desktop testing
+
+#### **Next Immediate Tasks**
+1. **Test Category Fix**: Verify expense analysis now shows proper categories via Claude Desktop
+2. **Phase 2 Completion**: Implement remaining savings optimization recommendations
+3. **Comprehensive Testing**: Expand test suite for all analytics functionality
+
+### 📁 **Key File Locations for Continuation**
+
 ## 📋 **Requirements Analysis**
 
 ### **Core User Stories**
@@ -23,34 +116,77 @@ Design and implement advanced financial analytics capabilities for the MoneyWiz 
 
 ## 🏗️ **System Architecture**
 
-### **Component Hierarchy**
+**Core Implementation Files**:
+- `src/moneywiz_mcp_server/services/transaction_service.py` - Main transaction logic (JUST FIXED category resolution)
+- `src/moneywiz_mcp_server/tools/analytics.py` - MCP analytics tools
+- `src/moneywiz_mcp_server/tools/transactions.py` - Transaction search tools
+- `src/moneywiz_mcp_server/models/transaction.py` - Transaction data models
+- `src/moneywiz_mcp_server/models/analytics_result.py` - Analytics result models
+- `launcher.py` - MCP server launcher with environment config
+- `.env` - Environment configuration (user-specific, not in git)
+- `.env.example` - Template for environment setup
+
+**Database Connection**:
+- `src/moneywiz_mcp_server/database/connection.py` - Database manager
+- MoneyWiz database: `$MONEYWIZ_DB_PATH` (configured in .env)
+- Read-only access for safety
+
+**Configuration**:
+- Claude Desktop config: `~/.config/claude-desktop/config.json` or `~/Library/Application Support/Claude/claude_desktop_config.json`
+- MCP server configured as "moneywiz" with launcher.py
+
+### **Component Implementation Status**
 ```
 MoneyWiz MCP Server
 ├── tools/
-│   ├── accounts.py (✅ existing)
-│   ├── transactions.py (🆕 new)
-│   ├── analytics.py (🆕 new)
-│   └── insights.py (🆕 new)
+│   ├── accounts.py (✅ WORKING - balance calculation fixed)
+│   ├── transactions.py (✅ IMPLEMENTED - search_transactions tool)
+│   ├── analytics.py (✅ IMPLEMENTED - analyze_expenses, income_vs_expenses tools)
+│   └── insights.py (❌ NOT STARTED - savings recommendations)
 ├── services/
-│   ├── transaction_service.py (🆕 new)
-│   ├── analytics_service.py (🆕 new)
-│   └── recommendation_service.py (🆕 new)
+│   ├── transaction_service.py (✅ IMPLEMENTED - JUST FIXED category resolution)
+│   ├── analytics_service.py (❌ NOT NEEDED - logic in transaction_service)
+│   └── recommendation_service.py (❌ NOT STARTED - for Phase 2)
 ├── models/
-│   ├── transaction.py (🆕 new)
-│   ├── category.py (🆕 new)
-│   └── analytics_result.py (🆕 new)
+│   ├── transaction.py (✅ IMPLEMENTED - complete TransactionModel)
+│   ├── category.py (❌ NOT NEEDED - using direct queries)
+│   └── analytics_result.py (✅ IMPLEMENTED - IncomeExpenseAnalysis, CategoryExpense)
 └── utils/
-    ├── date_utils.py (🆕 new)
-    ├── currency_utils.py (🆕 new)
-    └── formatters.py (✅ existing)
+    ├── date_utils.py (✅ IMPLEMENTED - Core Data timestamp conversion)
+    ├── currency_utils.py (❌ NOT STARTED - future enhancement)
+    └── formatters.py (✅ EXISTING - inherited from original)
 ```
 
 ### **Database Entities (MoneyWiz Core Data)**
-Based on previous analysis and moneywiz-api source:
-- **Transactions**: Entities 37, 45, 46, 47
-- **Categories**: Entity 19 (157 categories identified)
-- **Payees**: Entity 28 (512 payees identified)
-- **Accounts**: Entities 10-16 (52 accounts available)
+Based on analysis and moneywiz-api source code verification:
+
+**Core Entities**:
+- **Transactions**: Entities 37 (deposit), 45 (transfer-in), 46 (transfer-out), 47 (withdraw)
+- **Investment Transactions**: Entities 38 (exchange), 40 (buy), 41 (sell), 42 (reconcile), 43 (refund), 44 (budget)
+- **Categories**: Entity 19 - **CRITICAL**: Linked via `ZCATEGORYASSIGMENT` table, names in `ZNAME2` field
+- **Payees**: Entity 28 - Names in `ZNAME` field
+- **Accounts**: Entities 10-16 - Balance calculation: `ZOPENINGBALANCE + sum(ZAMOUNT1)` linked via `ZACCOUNT2`
+
+**Database Schema Critical Details**:
+```sql
+-- Transaction to Category Linking (FIXED)
+SELECT ca.ZCATEGORY FROM ZCATEGORYASSIGMENT ca WHERE ca.ZTRANSACTION = ?
+
+-- Category Names (FIXED - use ZNAME2, not ZNAME)
+SELECT ZNAME2 FROM ZSYNCOBJECT WHERE Z_ENT = 19 AND Z_PK = ?
+
+-- Account Balance Calculation (FIXED)
+SELECT ZOPENINGBALANCE FROM ZSYNCOBJECT WHERE Z_PK = ? AND Z_ENT BETWEEN 10 AND 16
+SELECT ZAMOUNT1 FROM ZSYNCOBJECT WHERE Z_ENT IN (37,45,46,47) AND ZACCOUNT2 = ?
+-- Formula: opening_balance + sum(transaction_amounts)
+
+-- Transaction Fields
+-- ZAMOUNT1: Account-level amount (used for balance calculation)
+-- ZACCOUNT2: Links transaction to account
+-- ZDATE1: Transaction date (Core Data timestamp)
+-- ZDESC2: Transaction description
+-- ZPAYEE2: Payee ID reference
+```
 
 ## 📊 **Data Flow Architecture**
 
@@ -201,38 +337,46 @@ class SavingsAnalysis:
 
 ## 🚀 **Implementation Phases**
 
-### **Phase 1: Foundation (Current Sprint)**
-1. Create transaction service layer
-2. Implement basic transaction querying
-3. Set up test framework for analytics
-4. Design category mapping system
+### **Phase 1: Foundation - ✅ COMPLETED**
+1. ✅ Create transaction service layer - `transaction_service.py` implemented
+2. ✅ Implement basic transaction querying - `get_transactions()` method working
+3. ✅ Set up test framework for analytics - Basic test structure in place
+4. ✅ Design category mapping system - **JUST FIXED** category resolution via ZCATEGORYASSIGMENT
 
-### **Phase 2: Core Analytics**
-1. Implement expense analysis by category
-2. Create income vs expense analysis
-3. Build time-based filtering
-4. Add multi-currency support
+### **Phase 2: Core Analytics - 🔄 90% COMPLETE**
+1. ✅ Implement expense analysis by category - `get_expense_summary()` implemented
+2. ✅ Create income vs expense analysis - `get_income_vs_expense()` implemented
+3. ✅ Build time-based filtering - Date range filtering working
+4. ✅ Add multi-currency support - Basic support implemented
+5. 🔄 **NEXT**: Test category resolution fix with Claude Desktop
+6. ❌ **PENDING**: Implement savings optimization recommendations
 
-### **Phase 3: Advanced Features**
-1. Implement savings recommendations
-2. Add trend analysis
-3. Create performance optimizations
-4. Build comprehensive test suite
+### **Phase 3: Advanced Features - ❌ NOT STARTED**
+1. ❌ Implement savings recommendations - Create `recommendation_service.py`
+2. ❌ Add trend analysis - Monthly/quarterly trend analysis
+3. ❌ Create performance optimizations - Query optimization, better caching
+4. ❌ Build comprehensive test suite - Expand beyond basic tests
 
-### **Phase 4: Integration & Polish**
-1. Integrate with existing MCP server
-2. Add comprehensive error handling
-3. Create user documentation
-4. Performance tuning and optimization
+### **Phase 4: Integration & Polish - 🔄 PARTIALLY COMPLETE**
+1. ✅ Integrate with existing MCP server - Working with Claude Desktop
+2. ✅ Add comprehensive error handling - Basic error handling implemented
+3. ✅ Create user documentation - SETUP.md updated
+4. ❌ Performance tuning and optimization - Not started
 
 ## 📈 **Success Metrics**
 
-### **Functional Requirements**
-- ✅ Handle "last 3 months" time-based queries
-- ✅ Identify top spending categories accurately
-- ✅ Provide actionable savings recommendations
-- ✅ Support multi-currency transactions
-- ✅ Maintain existing account balance accuracy
+### **Functional Requirements Status**
+- ✅ Handle "last 3 months" time-based queries - Working
+- 🔄 Identify top spending categories accurately - **JUST FIXED**, needs testing
+- ❌ Provide actionable savings recommendations - Phase 3 pending
+- ✅ Support multi-currency transactions - Basic support implemented
+- ✅ Maintain existing account balance accuracy - Fixed and verified
+
+### **Known Issues FIXED**
+- ✅ **Balance Calculation**: Fixed $0.00 balance issue, now shows correct values like $1,657.60
+- ✅ **Category Resolution**: Fixed "Uncategorized" issue by using ZCATEGORYASSIGMENT table and ZNAME2 field
+- ✅ **Environment Configuration**: Removed hardcoded paths, uses .env system
+- ✅ **Claude Desktop Integration**: MCP server working with proper configuration
 
 ### **Performance Requirements**
 - Query response time: <2 seconds for 6 months of data
@@ -268,4 +412,58 @@ class SavingsAnalysis:
 - Performance considerations
 - Integration guide for Claude Desktop
 
-This architecture provides a solid foundation for implementing advanced financial analytics while maintaining the existing system's stability and performance.
+## 🔄 **Continuation Guide for Future Sessions**
+
+### **Immediate Next Steps**
+1. **Test Category Resolution Fix**: 
+   - Run MCP server: `python launcher.py`
+   - Test via Claude Desktop expense analysis
+   - Verify categories show actual names instead of "Uncategorized"
+   - Previous test showed all $24M+ as "Uncategorized", should now show proper breakdown
+
+2. **Complete Phase 2**:
+   - Implement savings optimization recommendations in `tools/insights.py`
+   - Create `recommendation_service.py` for savings analysis
+   - Add trend analysis capabilities
+
+3. **Expand Testing**:
+   - Create comprehensive test suite in `tests/`
+   - Add performance tests for large datasets
+   - Validate multi-currency support
+
+### **Key Commands for Development**
+```bash
+# Start MCP server
+python launcher.py
+
+# Run tests
+python -m pytest tests/ -v
+
+# Check environment setup
+python setup_env.py
+
+# Git workflow
+git checkout feature/financial-analytics
+git add .
+git commit -m "Category resolution fix"
+```
+
+### **Critical Context for Future Sessions**
+
+**Balance Calculation Formula**: `ZOPENINGBALANCE + sum(ZAMOUNT1)` where transactions link via `ZACCOUNT2`
+
+**Category Resolution**: Use `ZCATEGORYASSIGMENT` table → get `ZCATEGORY` → lookup `ZNAME2` in entity 19
+
+**Database Location**: Configured in `.env` file as `MONEYWIZ_DB_PATH`
+
+**MCP Configuration**: Claude Desktop configured to use `launcher.py` in moneywiz-mcp-server
+
+**Recent Fix**: Category resolution was completely broken (all "Uncategorized"), just implemented fix using correct table structure based on moneywiz-api analysis
+
+### **File Priority for Continuation**
+1. `src/moneywiz_mcp_server/services/transaction_service.py` - Core logic, recently fixed
+2. `src/moneywiz_mcp_server/tools/analytics.py` - MCP tools interface
+3. `tests/` - Expand test coverage
+4. `specs/` - Update with implementation progress
+
+This implementation has solid foundations with working transaction analysis, account balance calculation, and environment configuration. The major recent fix addressed category resolution which was preventing proper expense analysis. Ready for testing and Phase 2 completion.

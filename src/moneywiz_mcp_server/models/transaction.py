@@ -139,8 +139,8 @@ class TransactionModel:
             notes=row.get("ZNOTES1"),
             reconciled=bool(row.get("ZRECONCILED", 0)),
             transaction_type=transaction_type,
-            category=None,  # Will be resolved separately
-            category_id=row.get("ZCATEGORY2"),
+            category=None,  # Will be resolved separately via ZCATEGORYASSIGMENT table
+            category_id=None,  # Will be resolved separately via ZCATEGORYASSIGMENT table
             payee=None,  # Will be resolved separately
             payee_id=row.get("ZPAYEE2"),
             currency="USD",  # Will be resolved from account

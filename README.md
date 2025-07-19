@@ -1,176 +1,360 @@
 # MoneyWiz MCP Server
 
-A Model Context Protocol (MCP) server that provides AI assistants like Claude with access to MoneyWiz financial data.
+A Model Context Protocol (MCP) server that provides AI assistants like Claude with secure, read-only access to your MoneyWiz financial data for natural language queries and financial analytics.
 
-## 🎯 Status: PRODUCTION READY (Account Tools)
+![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green)
+![Platform: macOS](https://img.shields.io/badge/Platform-macOS-blue)
+![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 
-✅ **Fully functional** account management tools  
-✅ **52 real accounts** successfully accessed from MoneyWiz database  
-✅ **Real balance calculation** - Fixed $0.00 balance issue  
-✅ **Claude Desktop integration** working  
-🚧 **Transaction tools** - next development priority  
+## 🚀 Quick Start (30 seconds)
 
-## 🚀 Quick Start
-
-### 1. Environment Setup
 ```bash
-# Navigate to project
-cd /Users/jcvalerio/jcvalerio/dev/github/moneywiz-mcp-server
+# 1. Install the server
+pip install git+https://github.com/jcvalerio/moneywiz-mcp-server.git
 
-# Activate virtual environment  
+# 2. Set up configuration
+python setup_env.py
+
+# 3. Add to Claude Desktop config (~/.../Claude/claude_desktop_config.json)
+{
+  "mcpServers": {
+    "moneywiz": {
+      "command": "python",
+      "args": ["-m", "moneywiz_mcp_server"]
+    }
+  }
+}
+
+# 4. Restart Claude Desktop and ask: "Show me my MoneyWiz accounts"
+```
+
+## ✨ What You Can Do
+
+Ask Claude natural language questions about your finances:
+
+- **"Show me all my MoneyWiz accounts with their balances"**
+- **"Analyze my expenses for the last 3 months by category"**
+- **"What's my savings rate this year?"**
+- **"Which spending category impacts my finances the most?"**
+- **"Search my transactions from last month in the Groceries category"**
+
+## 📋 Prerequisites
+
+- **macOS**: MoneyWiz MCP Server only supports macOS (MoneyWiz is only available on Apple platforms)
+- **MoneyWiz App**: Install and set up MoneyWiz with some financial data
+- **Python 3.10+**: Ensure Python is installed
+- **Claude Desktop**: Install Claude Desktop application
+
+## 🛠️ Installation
+
+### Option 1: Install from Source (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
+cd moneywiz-mcp-server
+
+# Create virtual environment
+python -m venv venv
 source venv/bin/activate
 
-# Test everything works
-python test_mcp_connection.py
+# Install with dependencies
+pip install -e ".[dev,test]"
+
+# Run setup to find your MoneyWiz database
+python setup_env.py
 ```
 
-### 2. Claude Desktop Integration
-Your MoneyWiz MCP server is already configured in Claude Desktop! Just:
+### Option 2: Install from PyPI (When Available)
 
-1. **Restart Claude Desktop** completely (Quit → Reopen)
-2. **Test the integration** with: `"Can you show me my MoneyWiz accounts?"`
-
-### 3. Continue Development
 ```bash
-# Get development status and next steps
-./continue-development.py
-
-# Or if not executable:
-python continue-development.py
+pip install moneywiz-mcp-server
 ```
 
-## 🛠️ What's Working
+## ⚙️ Configuration
 
-### Account Tools (100% Complete)
-- **`list_accounts`** - Lists all 52 accounts with balances and types
-- **`get_account`** - Gets detailed account information by ID
-- **Account filtering** - By type (checking, savings, credit card, etc.)
-- **Real data** - Connected to your actual MoneyWiz database
+### Automatic Setup (Recommended)
 
-### Example Queries
-Ask Claude Desktop:
+```bash
+# Run the setup script to automatically find and configure your MoneyWiz database
+python setup_env.py
 ```
-"Show me all my MoneyWiz accounts"
-"What's the balance of my Scotiabank account?"
-"List only my checking accounts from MoneyWiz"
-"Get details for my Multimoney $ account"
+
+The setup script will:
+- Search for MoneyWiz databases on your Mac
+- Let you select the correct database
+- Create a `.env` file with your configuration
+- Provide next steps for testing
+
+### Manual Configuration
+
+Create a `.env` file in the project root:
+
+```bash
+# MoneyWiz Database Path
+MONEYWIZ_DB_PATH=/Users/yourusername/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite
+
+# Security Settings  
+MONEYWIZ_READ_ONLY=true
+
+# Optional Settings
+LOG_LEVEL=INFO
+CACHE_TTL=300
+MAX_RESULTS=1000
 ```
+
+### Finding Your MoneyWiz Database
+
+MoneyWiz stores data in these locations on macOS:
+
+```bash
+# MoneyWiz 3 (most common)
+~/Library/Containers/com.moneywiz.mac/Data/Documents/
+~/Library/Containers/com.moneywiz.personalfinance/Data/Documents/
+~/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/
+
+# MoneyWiz 2
+~/Library/Application Support/SilverWiz/MoneyWiz 2/
+```
+
+Search command:
+```bash
+find ~ -name "*.sqlite*" 2>/dev/null | grep -i moneywiz
+```
+
+## 🖥️ Claude Desktop Setup
+
+### 1. Find Your Claude Desktop Config
+
+The configuration file is located at:
+```bash
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+
+### 2. Add MCP Server Configuration
+
+Choose one of these configurations:
+
+#### Standard Installation
+```json
+{
+  "mcpServers": {
+    "moneywiz": {
+      "command": "python",
+      "args": ["-m", "moneywiz_mcp_server"]
+    }
+  }
+}
+```
+
+#### Virtual Environment
+```json
+{
+  "mcpServers": {
+    "moneywiz": {
+      "command": "/path/to/your/venv/bin/python",
+      "args": ["-m", "moneywiz_mcp_server"]
+    }
+  }
+}
+```
+
+#### With Custom Database Path
+```json
+{
+  "mcpServers": {
+    "moneywiz": {
+      "command": "python",
+      "args": ["-m", "moneywiz_mcp_server"],
+      "env": {
+        "MONEYWIZ_DB_PATH": "/path/to/your/MoneyWiz.sqlite",
+        "MONEYWIZ_READ_ONLY": "true"
+      }
+    }
+  }
+}
+```
+
+### 3. Restart Claude Desktop
+
+Completely quit and reopen Claude Desktop for changes to take effect.
+
+## 🧪 Testing
+
+### Test Database Connection
+```bash
+python -c "
+from moneywiz_mcp_server.config import Config
+from moneywiz_mcp_server.database.connection import DatabaseManager
+import asyncio
+
+async def test():
+    config = Config.from_env()
+    print(f'Database: {config.database_path}')
+    db = DatabaseManager(config.database_path)
+    await db.initialize()
+    print('✅ Database connection successful!')
+    await db.close()
+
+asyncio.run(test())
+"
+```
+
+### Test MCP Server
+```bash
+# Start the server (should connect via stdio)
+python -m moneywiz_mcp_server
+```
+
+### Test with Claude Desktop
+
+Try these queries in Claude Desktop:
+- "Show me all my MoneyWiz accounts"
+- "Analyze my expenses for the last 3 months"
+- "What's my current savings rate?"
+
+## 🛡️ Available Tools
+
+Once configured, Claude will have access to these MoneyWiz tools:
+
+### Account Management
+- **`list_accounts`** - List all accounts with balances and types
+- **`get_account`** - Get detailed account information by ID
+
+### Financial Analytics  
+- **`search_transactions`** - Search transactions with natural language time periods
+- **`analyze_expenses_by_category`** - Analyze spending patterns by category
+- **`analyze_income_vs_expenses`** - Compare income vs expenses with savings analysis
 
 ## 🔧 Technical Details
 
 ### Architecture
 - **MCP Server**: Modern decorator-based tool registration
-- **Database**: Direct Core Data SQLite access (bypasses moneywiz-api issues)
+- **Database**: Direct Core Data SQLite access (read-only by default)
 - **Safety**: Read-only mode by default
 - **Integration**: Seamless Claude Desktop integration
 
-### Database Connection
-- **Location**: MoneyWiz Setapp container database
-- **Size**: 24.3MB of financial data
-- **Entities**: 52 accounts across 7 different account types
-- **Access**: Direct Core Data entity mapping
+### Database Support
+- **MoneyWiz 3**: Full support for latest version including Setapp
+- **MoneyWiz 2**: Legacy support
+- **Data**: Accounts, transactions, categories, payees
+- **Size**: Efficiently handles databases with thousands of transactions
 
-### Core Data Mapping
+## 🐛 Troubleshooting
+
+### Server Won't Start
+
+```bash
+# Check if database file exists
+ls -la "/path/to/your/MoneyWiz.sqlite"
+
+# Test configuration
+python -c "from moneywiz_mcp_server.config import Config; print(Config.from_env().database_path)"
+
+# Check server logs
+python -m moneywiz_mcp_server 2>&1 | head -20
 ```
-Account Types Discovered:
-- BankChequeAccount (8) → checking
-- BankSavingAccount (7) → savings  
-- CashAccount (4) → cash
-- CreditCardAccount (24) → credit_card
-- LoanAccount (2) → loan
-- InvestmentAccount (4) → investment
-- ForexAccount (3) → forex
-```
+
+### Claude Desktop Connection Issues
+
+1. **Validate JSON syntax**:
+   ```bash
+   python -c "import json; print(json.load(open('claude_desktop_config.json')))"
+   ```
+
+2. **Test exact command**:
+   ```bash
+   python -m moneywiz_mcp_server
+   ```
+
+3. **Check file permissions**:
+   ```bash
+   ls -la "/path/to/your/MoneyWiz.sqlite"
+   ```
+
+### Common Issues
+
+- **"Database not found"**: Check `MONEYWIZ_DB_PATH` and use absolute paths
+- **"Permission denied"**: Ensure file permissions and MoneyWiz isn't locking the file
+- **"MCP server not responding"**: Restart Claude Desktop and check JSON syntax
+- **"No data found"**: Ensure MoneyWiz has transaction data and is the correct database
+
+## 🔒 Security
+
+- **Read-Only Mode**: Database opened in read-only mode by default
+- **Local Access**: Only accesses local database files
+- **No Network**: No external network connections
+- **Privacy**: All data processing happens locally
+- **Validation**: All inputs validated before database queries
 
 ## 📁 Project Structure
 
 ```
 moneywiz-mcp-server/
-├── src/moneywiz_mcp_server/     # Main package
-│   ├── server.py                # MCP server (working)
-│   ├── config.py                # Configuration (working)
-│   ├── database/connection.py   # Core Data access (working)
-│   ├── tools/accounts.py        # Account tools (working)
-│   └── utils/                   # Validation & formatting
-├── specs/                       # Documentation
-│   ├── implementation-status.md # Current status & next steps
-│   └── *.md                     # Requirements & guides
-├── tests/                       # Test suite
-├── SETUP.md                     # Installation guide
-├── test_mcp_connection.py       # Comprehensive test
-└── continue-development.py      # Development continuation
+├── README.md                    # This file
+├── pyproject.toml              # Package configuration
+├── setup_env.py               # Setup helper script
+├── examples/                   # Configuration examples
+│   ├── claude_desktop_config.json
+│   ├── claude_desktop_config_venv.json
+│   └── claude_code_config.json
+├── src/moneywiz_mcp_server/    # Main package
+│   ├── server.py               # MCP server
+│   ├── config.py               # Configuration
+│   ├── database/               # Database connection
+│   ├── tools/                  # MCP tools
+│   ├── services/               # Business logic
+│   └── utils/                  # Utilities
+└── tests/                      # Test suite
 ```
 
-## 🎯 Next Development Priorities
+## 🚀 Development
 
-### 1. Transaction Tools (High Priority)
-The foundation is ready. Next step is implementing transaction search and analytics:
-
+### Setup Development Environment
 ```bash
-# Research transaction entities (entities 37, 45, 46, 47)
-python -c "
-import asyncio
-from moneywiz_mcp_server.database.connection import DatabaseManager
-from moneywiz_mcp_server.config import Config
-
-async def research():
-    config = Config.from_env()
-    db = DatabaseManager(config.database_path)
-    await db.initialize()
-    
-    # Sample transaction data
-    for entity_id in [37, 45, 46, 47]:
-        txns = await db.execute_query('SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ? LIMIT 1', (entity_id,))
-        if txns:
-            print(f'Entity {entity_id}: {list(txns[0].keys())[:10]}')
-    
-    await db.close()
-
-asyncio.run(research())
-"
+git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
+cd moneywiz-mcp-server
+python -m venv venv
+source venv/bin/activate
+pip install -e ".[dev,test]"
+python setup_env.py
 ```
 
-### 2. Available Entity Data
-Already discovered in the database:
-- **Transactions**: 13,092 transaction records across 4 entity types
-- **Categories**: 157 categories for spending analysis
-- **Payees**: 512 payees for merchant analysis
+### Run Tests
+```bash
+python -m pytest tests/ -v
+```
 
-## 🔒 Security & Safety
+### Code Quality
+```bash
+# Linting
+flake8 src/
+mypy src/
 
-- **Read-only mode**: Database opened in read-only mode by default
-- **Input validation**: All parameters validated before processing
-- **Error handling**: Graceful fallbacks and error recovery
-- **Privacy**: Local-only access, no external network calls
+# Formatting
+black src/
+isort src/
+```
 
-## 📖 Documentation
+## 📄 License
 
-- **[SETUP.md](SETUP.md)** - Complete installation and configuration guide
-- **[specs/implementation-status.md](specs/implementation-status.md)** - Detailed status and continuation guide
-- **[specs/moneywiz-mcp-prd.md](specs/moneywiz-mcp-prd.md)** - Original requirements
-- **[test_mcp_connection.py](test_mcp_connection.py)** - Comprehensive test script
+MIT License - see LICENSE file for details.
 
 ## 🆘 Support
 
-### Common Issues
-1. **"No accounts found"** - Check MONEYWIZ_DB_PATH environment variable
-2. **"Database not found"** - Verify MoneyWiz Setapp is installed and has data
-3. **"Claude doesn't see MCP"** - Restart Claude Desktop after config changes
+- **Issues**: [GitHub Issues](https://github.com/jcvalerio/moneywiz-mcp-server/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/jcvalerio/moneywiz-mcp-server/discussions)
 
-### Debugging
-```bash
-# Test database connection
-python test_mcp_connection.py
+## 🤝 Contributing
 
-# Check environment
-echo $MONEYWIZ_DB_PATH
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
-# Verify Claude Desktop config
-cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
-## 🎉 Success!
+---
 
-Your MoneyWiz MCP server is **production-ready** for account operations and provides a **solid foundation** for extending with transaction and analytics features.
-
-**Just restart Claude Desktop and start asking about your accounts!** 🏦💰
+**⚠️ Important**: Always use read-only mode and back up your MoneyWiz database before first use.

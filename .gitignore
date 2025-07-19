@@ -44,6 +44,8 @@ coverage.xml
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # Local config files
 claude_desktop_config_real.json

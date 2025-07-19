@@ -41,19 +41,118 @@ server = Server("moneywiz-mcp-server")
 @server.list_tools()
 async def handle_list_tools() -> list[Tool]:
     """List available tools."""
-    if not db_manager:
-        raise RuntimeError("Database not initialized")
-    
-    # Create tool instances with database manager
-    tools = [
-        list_accounts_tool(db_manager),
-        get_account_tool(db_manager),
-        search_transactions_tool(db_manager),
-        analyze_expenses_by_category_tool(db_manager),
-        analyze_income_vs_expenses_tool(db_manager)
+    # Return static tool definitions - don't create instances here
+    return [
+        Tool(
+            name="list_accounts",
+            description="List all MoneyWiz accounts with current balances",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "include_hidden": {
+                        "type": "boolean",
+                        "description": "Include hidden accounts in results",
+                        "default": False
+                    },
+                    "account_type": {
+                        "type": "string",
+                        "description": "Filter accounts by type",
+                        "enum": ["checking", "savings", "credit_card", "investment", "cash", "loan", "forex"]
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="get_account",
+            description="Get detailed information about a specific account",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "account_id": {
+                        "type": "string",
+                        "description": "The unique account identifier"
+                    },
+                    "include_transactions": {
+                        "type": "boolean",
+                        "description": "Include recent transactions in response",
+                        "default": False
+                    }
+                },
+                "required": ["account_id"]
+            }
+        ),
+        Tool(
+            name="search_transactions",
+            description="Search and filter transactions with natural language time periods and criteria",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "time_period": {
+                        "type": "string",
+                        "description": "Time period in natural language (e.g., 'last 3 months', 'this year')",
+                        "default": "last 3 months"
+                    },
+                    "account_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of account IDs to filter by"
+                    },
+                    "categories": {
+                        "type": "array", 
+                        "items": {"type": "string"},
+                        "description": "Optional list of category names to filter by"
+                    },
+                    "transaction_type": {
+                        "type": "string",
+                        "description": "Optional transaction type filter",
+                        "enum": ["deposit", "withdraw", "transfer_in", "transfer_out", "investment_buy", "investment_sell", "refund"]
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of transactions to return",
+                        "default": 100,
+                        "minimum": 1,
+                        "maximum": 1000
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="analyze_expenses_by_category",
+            description="Analyze expenses by category to identify spending patterns and high-impact categories",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "time_period": {
+                        "type": "string",
+                        "description": "Time period in natural language (e.g., 'last 3 months', 'this year')",
+                        "default": "last 3 months"
+                    },
+                    "top_categories": {
+                        "type": "integer",
+                        "description": "Number of top categories to analyze",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="analyze_income_vs_expenses",
+            description="Analyze income vs expenses to understand savings rate and financial health",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "time_period": {
+                        "type": "string",
+                        "description": "Time period in natural language (e.g., 'last 3 months', 'this year')",
+                        "default": "last 3 months"
+                    }
+                }
+            }
+        )
     ]
-    
-    return tools
 
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
