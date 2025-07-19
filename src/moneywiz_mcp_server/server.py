@@ -14,6 +14,11 @@ from mcp.types import Tool, TextContent, CallToolResult
 
 from .database.connection import DatabaseManager
 from .tools.accounts import list_accounts_tool, get_account_tool
+from .tools.transactions import (
+    search_transactions_tool,
+    analyze_expenses_by_category_tool,
+    analyze_income_vs_expenses_tool
+)
 from .config import Config
 
 # Configure logging
@@ -36,46 +41,19 @@ server = Server("moneywiz-mcp-server")
 @server.list_tools()
 async def handle_list_tools() -> list[Tool]:
     """List available tools."""
-    return [
-        Tool(
-            name="list_accounts",
-            description="List all MoneyWiz accounts with current balances",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "include_hidden": {
-                        "type": "boolean",
-                        "description": "Include hidden accounts in results",
-                        "default": False
-                    },
-                    "account_type": {
-                        "type": "string",
-                        "description": "Filter accounts by type",
-                        "enum": ["checking", "savings", "credit_card", "investment", "cash", "loan", "forex"]
-                    }
-                }
-            }
-        ),
-        Tool(
-            name="get_account",
-            description="Get detailed information about a specific account",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "account_id": {
-                        "type": "string",
-                        "description": "The unique account identifier"
-                    },
-                    "include_transactions": {
-                        "type": "boolean",
-                        "description": "Include recent transactions in response",
-                        "default": False
-                    }
-                },
-                "required": ["account_id"]
-            }
-        )
+    if not db_manager:
+        raise RuntimeError("Database not initialized")
+    
+    # Create tool instances with database manager
+    tools = [
+        list_accounts_tool(db_manager),
+        get_account_tool(db_manager),
+        search_transactions_tool(db_manager),
+        analyze_expenses_by_category_tool(db_manager),
+        analyze_income_vs_expenses_tool(db_manager)
     ]
+    
+    return tools
 
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -83,8 +61,8 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
     if not db_manager:
         raise RuntimeError("Database not initialized")
     
+    # Create tool instances and call handlers directly
     if name == "list_accounts":
-        from .tools.accounts import list_accounts_tool
         tool = list_accounts_tool(db_manager)
         result = await tool.handler(
             include_hidden=arguments.get("include_hidden", False),
@@ -93,11 +71,36 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=str(result))]
     
     elif name == "get_account":
-        from .tools.accounts import get_account_tool
         tool = get_account_tool(db_manager)
         result = await tool.handler(
             account_id=arguments["account_id"],
             include_transactions=arguments.get("include_transactions", False)
+        )
+        return [TextContent(type="text", text=str(result))]
+    
+    elif name == "search_transactions":
+        tool = search_transactions_tool(db_manager)
+        result = await tool.handler(
+            time_period=arguments.get("time_period", "last 3 months"),
+            account_ids=arguments.get("account_ids"),
+            categories=arguments.get("categories"),
+            transaction_type=arguments.get("transaction_type"),
+            limit=arguments.get("limit", 100)
+        )
+        return [TextContent(type="text", text=str(result))]
+    
+    elif name == "analyze_expenses_by_category":
+        tool = analyze_expenses_by_category_tool(db_manager)
+        result = await tool.handler(
+            time_period=arguments.get("time_period", "last 3 months"),
+            top_categories=arguments.get("top_categories", 10)
+        )
+        return [TextContent(type="text", text=str(result))]
+    
+    elif name == "analyze_income_vs_expenses":
+        tool = analyze_income_vs_expenses_tool(db_manager)
+        result = await tool.handler(
+            time_period=arguments.get("time_period", "last 3 months")
         )
         return [TextContent(type="text", text=str(result))]
     
