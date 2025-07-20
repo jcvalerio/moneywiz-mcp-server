@@ -9,7 +9,7 @@ import aiosqlite
 import pytest
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_moneywiz_api():
     """Mock MoneywizApi instance for testing."""
     api = Mock()
@@ -71,7 +71,7 @@ def mock_moneywiz_api():
     return api
 
 
-@pytest.fixture()
+@pytest.fixture
 async def temp_database():
     """Create a temporary SQLite database for testing."""
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
@@ -130,7 +130,7 @@ async def temp_database():
     Path(db_path).unlink(missing_ok=True)
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_database_manager(mock_moneywiz_api, temp_database):
     """Mock DatabaseManager for testing."""
     from moneywiz_mcp_server.database.connection import DatabaseManager
@@ -160,7 +160,7 @@ def mock_database_manager(mock_moneywiz_api, temp_database):
     return manager
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_account_data() -> list[dict[str, Any]]:
     """Sample account data for testing."""
     return [
@@ -191,7 +191,7 @@ def sample_account_data() -> list[dict[str, Any]]:
     ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_transaction_data() -> list[dict[str, Any]]:
     """Sample transaction data for testing."""
     return [

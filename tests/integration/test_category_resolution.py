@@ -11,7 +11,7 @@ from moneywiz_mcp_server.services.transaction_service import TransactionService
 class TestCategoryResolution:
     """Test suite to debug category resolution issues."""
 
-    @pytest.fixture()
+    @pytest.fixture
     async def real_db_manager(self):
         """Create a real database manager for integration testing."""
         try:
@@ -25,8 +25,8 @@ class TestCategoryResolution:
             if "db_manager" in locals():
                 await db_manager.close()
 
-    @pytest.mark.integration()
-    @pytest.mark.asyncio()
+    @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_category_assignment_table_exists(self, real_db_manager):
         """Test that ZCATEGORYASSIGMENT table exists and has data."""
         # Check if table exists
@@ -45,8 +45,8 @@ class TestCategoryResolution:
 
         print(f"✅ ZCATEGORYASSIGMENT table has {count_result[0]['count']} records")
 
-    @pytest.mark.integration()
-    @pytest.mark.asyncio()
+    @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_category_assignment_structure(self, real_db_manager):
         """Test the structure of ZCATEGORYASSIGMENT table."""
         # Get table schema
@@ -70,8 +70,8 @@ class TestCategoryResolution:
                 f"  Transaction: {sample.get('ZTRANSACTION')}, Category: {sample.get('ZCATEGORY')}"
             )
 
-    @pytest.mark.integration()
-    @pytest.mark.asyncio()
+    @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_category_names_table(self, real_db_manager):
         """Test category names in ZSYNCOBJECT table."""
         # Get categories from ZSYNCOBJECT where Z_ENT = 19
@@ -98,8 +98,8 @@ class TestCategoryResolution:
         print(f"Categories with ZNAME: {len(zname_with_values)}")
         print(f"Categories with ZNAME2: {len(zname2_with_values)}")
 
-    @pytest.mark.integration()
-    @pytest.mark.asyncio()
+    @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_transaction_category_join(self, real_db_manager):
         """Test joining transactions with their categories."""
         # Get some transactions with categories
@@ -155,8 +155,8 @@ class TestCategoryResolution:
             print(f"Debug - With ZNAME: {debug_result[0]['with_zname']}")
             print(f"Debug - With ZNAME2: {debug_result[0]['with_zname2']}")
 
-    @pytest.mark.integration()
-    @pytest.mark.asyncio()
+    @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_transaction_service_category_resolution(self, real_db_manager):
         """Test actual TransactionService category resolution."""
         # Create transaction service
@@ -222,8 +222,8 @@ class TestCategoryResolution:
         else:
             print(f"✅ TransactionService resolved {categorized_count} categories")
 
-    @pytest.mark.integration()
-    @pytest.mark.asyncio()
+    @pytest.mark.integration
+    @pytest.mark.asyncio
     async def test_alternative_category_resolution_strategies(self, real_db_manager):
         """Test alternative ways to resolve categories."""
         print("Testing alternative category resolution strategies...")

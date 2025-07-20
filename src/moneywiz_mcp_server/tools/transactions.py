@@ -5,13 +5,13 @@ from typing import Any
 
 from mcp.types import Tool
 
-from ..database.connection import DatabaseManager
-from ..services.transaction_service import TransactionService
-from ..utils.date_utils import (
+from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.services.transaction_service import TransactionService
+from moneywiz_mcp_server.utils.date_utils import (
     format_date_range_for_display,
     parse_natural_language_date,
 )
-from ..utils.formatters import format_currency
+from moneywiz_mcp_server.utils.formatters import format_currency
 
 logger = logging.getLogger(__name__)
 

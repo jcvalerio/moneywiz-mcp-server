@@ -5,8 +5,8 @@ from decimal import Decimal
 import logging
 from typing import Any
 
-from ..database.connection import DatabaseManager
-from ..models.analytics_result import CategoryExpense
+from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.models.analytics_result import CategoryExpense
 
 logger = logging.getLogger(__name__)
 

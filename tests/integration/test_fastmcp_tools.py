@@ -16,7 +16,7 @@ from moneywiz_mcp_server.main import (
 class TestFastMCPToolsIntegration:
     """Test suite for FastMCP tools integration."""
 
-    @pytest.fixture()
+    @pytest.fixture
     def mock_config(self):
         """Mock configuration for testing."""
         from moneywiz_mcp_server.config import Config
@@ -30,7 +30,7 @@ class TestFastMCPToolsIntegration:
         )
         return config
 
-    @pytest.fixture()
+    @pytest.fixture
     def setup_mcp_config(self, mock_config):
         """Setup MCP server with test configuration."""
         mcp._config = mock_config
@@ -39,7 +39,7 @@ class TestFastMCPToolsIntegration:
         if hasattr(mcp, "_config"):
             delattr(mcp, "_config")
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_get_savings_recommendations_tool(self, setup_mcp_config):
         """Test get_savings_recommendations FastMCP tool."""
         # Mock database manager and services
@@ -99,7 +99,7 @@ class TestFastMCPToolsIntegration:
             # Verify database connection was managed
             mock_db.close.assert_called_once()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_analyze_spending_trends_tool(self, setup_mcp_config):
         """Test analyze_spending_trends FastMCP tool."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
@@ -171,7 +171,7 @@ class TestFastMCPToolsIntegration:
                 months=6, category="Groceries"
             )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_analyze_category_trends_tool(self, setup_mcp_config):
         """Test analyze_category_trends FastMCP tool."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
@@ -248,7 +248,7 @@ class TestFastMCPToolsIntegration:
                 months=6, top_n=5
             )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_analyze_income_expense_trends_tool(self, setup_mcp_config):
         """Test analyze_income_expense_trends FastMCP tool."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
@@ -322,7 +322,7 @@ class TestFastMCPToolsIntegration:
                 months=12
             )
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_database_connection_lifecycle(self, setup_mcp_config):
         """Test that database connections are properly managed in tools."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
@@ -346,7 +346,7 @@ class TestFastMCPToolsIntegration:
                 # Even with exception, database should be closed
                 mock_db.close.assert_called_once()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_error_handling_in_tools(self, setup_mcp_config):
         """Test error handling in FastMCP tools."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:

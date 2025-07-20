@@ -16,18 +16,18 @@ from moneywiz_mcp_server.services.savings_service import SavingsService
 class TestSavingsService:
     """Test suite for SavingsService following TDD principles."""
 
-    @pytest.fixture()
+    @pytest.fixture
     def mock_db_manager(self):
         """Create mock database manager."""
         mock_db = AsyncMock()
         return mock_db
 
-    @pytest.fixture()
+    @pytest.fixture
     def savings_service(self, mock_db_manager):
         """Create SavingsService instance with mocked dependencies."""
         return SavingsService(mock_db_manager)
 
-    @pytest.fixture()
+    @pytest.fixture
     def sample_income_expense_data(self):
         """Sample income vs expense data for testing."""
         return IncomeVsExpenseResult(
@@ -39,7 +39,7 @@ class TestSavingsService:
             expense_breakdown=[],
         )
 
-    @pytest.fixture()
+    @pytest.fixture
     def sample_category_expenses(self):
         """Sample category expense data for testing."""
         return [
@@ -66,7 +66,7 @@ class TestSavingsService:
             ),
         ]
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_get_savings_recommendations_basic(
         self, savings_service, sample_income_expense_data, sample_category_expenses
     ):
@@ -123,7 +123,7 @@ class TestSavingsService:
         mock_transaction_service.get_income_vs_expense.assert_called_once()
         mock_transaction_service.get_expense_summary.assert_called_once()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_category_recommendations_high_spending(
         self, savings_service, sample_category_expenses
     ):
@@ -137,7 +137,7 @@ class TestSavingsService:
             percentage_of_total=30.0,  # >20% triggers recommendation
         )
 
-        categories = [high_spending_category] + sample_category_expenses
+        categories = [high_spending_category, *sample_category_expenses]
         total_expenses = 4000.0
 
         # Act
@@ -161,7 +161,7 @@ class TestSavingsService:
         assert rec["priority"] == "high"
         assert "reduce by 15%" in rec["description"].lower()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_discretionary_spending_recommendations(
         self, savings_service, sample_category_expenses
     ):
@@ -196,7 +196,7 @@ class TestSavingsService:
             assert rec["difficulty"] == "easy"
             assert "tips" in rec
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_target_savings_calculation(self, savings_service):
         """Test calculation of needed expense reduction for target savings rate."""
         # Arrange
@@ -215,7 +215,7 @@ class TestSavingsService:
         # So need to reduce by 4000 - 3750 = 250
         assert needed_reduction == 250.0
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_category_saving_tips(self, savings_service):
         """Test that category-specific saving tips are provided."""
         # Test various categories
@@ -232,7 +232,7 @@ class TestSavingsService:
         unknown_tips = savings_service._get_category_saving_tips("unknown category")
         assert "review spending" in unknown_tips[0].lower()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_fixed_vs_variable_analysis(
         self, savings_service, sample_category_expenses
     ):

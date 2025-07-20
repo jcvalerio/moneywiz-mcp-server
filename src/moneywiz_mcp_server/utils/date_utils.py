@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from ..models.transaction import DateRange
+from moneywiz_mcp_server.models.transaction import DateRange
 
 
 def get_date_range_from_months(months: int) -> DateRange:

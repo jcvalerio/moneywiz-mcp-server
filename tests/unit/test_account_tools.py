@@ -9,8 +9,8 @@ from moneywiz_mcp_server.tools.accounts import get_account_tool, list_accounts_t
 class TestListAccountsTool:
     """Test cases for list_accounts tool."""
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_list_accounts_basic(
         self, mock_database_manager, sample_account_data
     ):
@@ -40,8 +40,8 @@ class TestListAccountsTool:
             assert "currency" in account
             assert "last_updated" in account
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_list_accounts_exclude_hidden(
         self, mock_database_manager, sample_account_data
     ):
@@ -57,8 +57,8 @@ class TestListAccountsTool:
         assert len(result) == 2
         assert all(account["name"] != "Hidden Account" for account in result)
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_list_accounts_include_hidden(
         self, mock_database_manager, sample_account_data
     ):
@@ -74,8 +74,8 @@ class TestListAccountsTool:
         assert len(result) == 3
         assert any(account["name"] == "Hidden Account" for account in result)
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_list_accounts_filter_by_type(
         self, mock_database_manager, sample_account_data
     ):
@@ -94,8 +94,8 @@ class TestListAccountsTool:
         assert all(account["type"] == "checking" for account in result)
         assert result[0]["name"] == "Test Checking"
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_list_accounts_empty_result(self, mock_database_manager):
         """Test account listing with no accounts."""
         mock_database_manager.api.account_manager.get_all_accounts.return_value = []
@@ -105,7 +105,7 @@ class TestListAccountsTool:
 
         assert result == []
 
-    @pytest.mark.unit()
+    @pytest.mark.unit
     def test_list_accounts_tool_properties(self, mock_database_manager):
         """Test tool properties and parameters."""
         tool = list_accounts_tool(mock_database_manager)
@@ -128,8 +128,8 @@ class TestListAccountsTool:
 class TestGetAccountTool:
     """Test cases for get_account tool."""
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_get_account_basic(self, mock_database_manager):
         """Test basic account retrieval."""
         account_data = {
@@ -161,8 +161,8 @@ class TestGetAccountTool:
         # Should not include transactions by default
         assert "recent_transactions" not in result
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_get_account_with_transactions(self, mock_database_manager):
         """Test account retrieval with transactions."""
         account_data = {
@@ -206,8 +206,8 @@ class TestGetAccountTool:
         assert transaction["payee"] == "Coffee Shop"
         assert transaction["category"] == "Dining"
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_get_account_not_found(self, mock_database_manager):
         """Test account retrieval for non-existent account."""
         mock_database_manager.api.account_manager.get_account.return_value = None
@@ -217,7 +217,7 @@ class TestGetAccountTool:
         with pytest.raises(ValueError, match="Account .* not found"):
             await tool.handler(account_id="nonexistent")
 
-    @pytest.mark.unit()
+    @pytest.mark.unit
     def test_get_account_tool_properties(self, mock_database_manager):
         """Test tool properties and parameters."""
         tool = get_account_tool(mock_database_manager)

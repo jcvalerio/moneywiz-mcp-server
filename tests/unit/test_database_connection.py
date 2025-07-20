@@ -11,7 +11,7 @@ from moneywiz_mcp_server.database.connection import DatabaseManager
 class TestDatabaseManager:
     """Test cases for DatabaseManager class."""
 
-    @pytest.mark.unit()
+    @pytest.mark.unit
     def test_init_with_default_read_only(self):
         """Test DatabaseManager initialization with default read-only mode."""
         db_path = "/test/path/database.sqlite"
@@ -22,7 +22,7 @@ class TestDatabaseManager:
         assert manager._api is None
         assert manager._connection is None
 
-    @pytest.mark.unit()
+    @pytest.mark.unit
     def test_init_with_read_write_mode(self):
         """Test DatabaseManager initialization with read-write mode."""
         db_path = "/test/path/database.sqlite"
@@ -31,8 +31,8 @@ class TestDatabaseManager:
         assert manager.db_path == Path(db_path)
         assert manager.read_only is False
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_initialize_read_only_mode(self, temp_database):
         """Test database initialization in read-only mode."""
         with patch(
@@ -58,8 +58,8 @@ class TestDatabaseManager:
             mock_connect.assert_called_once_with(expected_uri, uri=True)
             assert manager._connection == mock_connection
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_initialize_read_write_mode(self, temp_database):
         """Test database initialization in read-write mode."""
         with patch(
@@ -79,8 +79,8 @@ class TestDatabaseManager:
             # Verify SQLite connection was made without read-only flag
             mock_connect.assert_called_once_with(temp_database, uri=True)
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_close_connection(self):
         """Test closing database connections."""
         manager = DatabaseManager("/test/path")
@@ -91,8 +91,8 @@ class TestDatabaseManager:
 
         mock_connection.close.assert_called_once()
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_close_no_connection(self):
         """Test closing when no connection exists."""
         manager = DatabaseManager("/test/path")
@@ -100,7 +100,7 @@ class TestDatabaseManager:
         # Should not raise any exception
         await manager.close()
 
-    @pytest.mark.unit()
+    @pytest.mark.unit
     def test_api_property_initialized(self):
         """Test api property when initialized."""
         manager = DatabaseManager("/test/path")
@@ -109,7 +109,7 @@ class TestDatabaseManager:
 
         assert manager.api == mock_api
 
-    @pytest.mark.unit()
+    @pytest.mark.unit
     def test_api_property_not_initialized(self):
         """Test api property when not initialized."""
         manager = DatabaseManager("/test/path")
@@ -117,8 +117,8 @@ class TestDatabaseManager:
         with pytest.raises(RuntimeError, match="Database not initialized"):
             _ = manager.api
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_transaction_context_read_only_error(self):
         """Test transaction context in read-only mode should raise error."""
         manager = DatabaseManager("/test/path", read_only=True)
@@ -129,8 +129,8 @@ class TestDatabaseManager:
             async with manager.transaction():
                 pass
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_transaction_context_success(self):
         """Test successful transaction context."""
         manager = DatabaseManager("/test/path", read_only=False)
@@ -143,8 +143,8 @@ class TestDatabaseManager:
         mock_connection.execute.assert_called_once_with("BEGIN")
         mock_connection.commit.assert_called_once()
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_transaction_context_rollback_on_exception(self):
         """Test transaction rollback on exception."""
         manager = DatabaseManager("/test/path", read_only=False)
@@ -157,8 +157,8 @@ class TestDatabaseManager:
 
         mock_connection.rollback.assert_called_once()
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_execute_query_success(self):
         """Test successful query execution."""
         manager = DatabaseManager("/test/path")
@@ -189,8 +189,8 @@ class TestDatabaseManager:
         mock_connection.execute.assert_called_once_with(query, params)
         mock_cursor.close.assert_called_once()
 
-    @pytest.mark.unit()
-    @pytest.mark.asyncio()
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_execute_query_no_params(self):
         """Test query execution without parameters."""
         manager = DatabaseManager("/test/path")

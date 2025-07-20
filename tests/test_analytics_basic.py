@@ -106,7 +106,7 @@ def test_transaction_expense_income_classification():
     assert not income.is_expense()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_transaction_service_initialization():
     """Test TransactionService initialization."""
     mock_db = Mock()
@@ -118,7 +118,7 @@ async def test_transaction_service_initialization():
     assert isinstance(service._account_currency_cache, dict)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_transaction_service_get_transactions():
     """Test TransactionService get_transactions method."""
     # Mock database manager

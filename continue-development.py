@@ -38,10 +38,7 @@ def check_environment():
     issues = []
 
     # Check Python version
-    if sys.version_info < (3, 10):
-        issues.append(f"❌ Python {sys.version} < 3.10 required")
-    else:
-        print(f"✅ Python {sys.version.split()[0]}")
+    print(f"✅ Python {sys.version.split()[0]}")
 
     # Check virtual environment
     venv_path = Path("venv")
@@ -70,12 +67,24 @@ def check_environment():
 
     # Check dependencies
     try:
-        import aiosqlite
-        import mcp
-
-        from moneywiz_mcp_server.config import Config
-
-        print("✅ All core dependencies installed")
+        import importlib.util
+        
+        # Use importlib.util.find_spec for availability checks
+        aiosqlite_spec = importlib.util.find_spec("aiosqlite")
+        mcp_spec = importlib.util.find_spec("mcp")
+        config_spec = importlib.util.find_spec("moneywiz_mcp_server.config")
+        
+        if all([aiosqlite_spec, mcp_spec, config_spec]):
+            print("✅ All core dependencies installed")
+        else:
+            missing = []
+            if not aiosqlite_spec:
+                missing.append("aiosqlite")
+            if not mcp_spec:
+                missing.append("mcp")
+            if not config_spec:
+                missing.append("moneywiz_mcp_server.config")
+            issues.append(f"❌ Missing dependencies: {', '.join(missing)}")
     except ImportError as e:
         issues.append(f"❌ Missing dependency: {e}")
 

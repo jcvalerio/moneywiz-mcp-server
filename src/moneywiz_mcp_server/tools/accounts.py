@@ -6,9 +6,12 @@ from typing import Any
 
 from mcp.types import Tool
 
-from ..database.connection import DatabaseManager
-from ..utils.formatters import format_currency
-from ..utils.validators import validate_account_id, validate_account_type
+from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.utils.formatters import format_currency
+from moneywiz_mcp_server.utils.validators import (
+    validate_account_id,
+    validate_account_type,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +189,7 @@ def list_accounts_tool(db_manager: DatabaseManager) -> Tool:
 
         except Exception as e:
             logger.error(f"Failed to list accounts: {e}")
-            raise RuntimeError(f"Failed to retrieve accounts: {e!s}")
+            raise RuntimeError(f"Failed to retrieve accounts: {e!s}") from e
 
     return Tool(
         name="list_accounts",
@@ -353,7 +356,7 @@ def get_account_tool(db_manager: DatabaseManager) -> Tool:
             raise
         except Exception as e:
             logger.error(f"Failed to get account {account_id}: {e}")
-            raise RuntimeError(f"Failed to retrieve account details: {e!s}")
+            raise RuntimeError(f"Failed to retrieve account details: {e!s}") from e
 
     return Tool(
         name="get_account",

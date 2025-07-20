@@ -54,7 +54,7 @@ def create_env_file():
 
     project_root = Path(__file__).parent
     env_file = project_root / ".env"
-    env_example = project_root / ".env.example"
+    project_root / ".env.example"
 
     print("🔍 MoneyWiz MCP Server - Environment Setup")
     print("=" * 50)

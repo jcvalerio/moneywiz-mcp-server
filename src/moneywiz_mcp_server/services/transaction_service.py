@@ -5,12 +5,17 @@ from decimal import Decimal
 import logging
 from typing import Any
 
-from ..database.connection import DatabaseManager
-from ..models.analytics_result import CategoryExpense, IncomeExpenseAnalysis
-from ..models.transaction import DateRange, TransactionModel, TransactionType
-from ..utils.date_utils import (
-    datetime_to_core_data_timestamp,
+from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.models.analytics_result import (
+    CategoryExpense,
+    IncomeExpenseAnalysis,
 )
+from moneywiz_mcp_server.models.transaction import (
+    DateRange,
+    TransactionModel,
+    TransactionType,
+)
+from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +86,7 @@ class TransactionService:
                 "ZDATE1 >= ?",
                 "ZDATE1 <= ?",
             ]
-            params = list(transaction_entities) + [start_timestamp, end_timestamp]
+            params = [*list(transaction_entities), start_timestamp, end_timestamp]
 
             # Add account filter
             if account_ids:
@@ -270,7 +275,7 @@ class TransactionService:
             )
 
             # Generate income breakdown
-            income_summary = await self.get_expense_summary(
+            await self.get_expense_summary(
                 start_date, end_date, "category"
             )
             # Note: This would need to be adapted for income transactions

@@ -72,7 +72,7 @@ def validate_amount(amount: float, transaction_type: str) -> bool:
     Raises:
         ValueError: If amount is invalid
     """
-    if not isinstance(amount, (int, float)):
+    if not isinstance(amount, int | float):
         raise ValueError("Amount must be a number")
 
     if amount == 0:

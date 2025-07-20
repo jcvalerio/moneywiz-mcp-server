@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import logging
 from typing import Any
 
-from ..database.connection import DatabaseManager
-from ..models.transaction import TransactionModel
+from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.models.transaction import TransactionModel
 
 logger = logging.getLogger(__name__)
 
