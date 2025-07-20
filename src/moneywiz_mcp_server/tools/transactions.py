@@ -117,7 +117,7 @@ def search_transactions_tool(db_manager: DatabaseManager) -> Tool:
 
         except Exception as e:
             logger.error(f"Failed to search transactions: {e}")
-            raise RuntimeError(f"Failed to search transactions: {e!s}")
+            raise RuntimeError(f"Failed to search transactions: {e!s}") from e
 
     return Tool(
         name="search_transactions",
@@ -269,7 +269,7 @@ def analyze_expenses_by_category_tool(db_manager: DatabaseManager) -> Tool:
 
         except Exception as e:
             logger.error(f"Failed to analyze expenses by category: {e}")
-            raise RuntimeError(f"Failed to analyze expenses by category: {e!s}")
+            raise RuntimeError(f"Failed to analyze expenses by category: {e!s}") from e
 
     return Tool(
         name="analyze_expenses_by_category",
@@ -398,7 +398,7 @@ def analyze_income_vs_expenses_tool(db_manager: DatabaseManager) -> Tool:
 
         except Exception as e:
             logger.error(f"Failed to analyze income vs expenses: {e}")
-            raise RuntimeError(f"Failed to analyze income vs expenses: {e!s}")
+            raise RuntimeError(f"Failed to analyze income vs expenses: {e!s}") from e
 
     return Tool(
         name="analyze_income_vs_expenses",

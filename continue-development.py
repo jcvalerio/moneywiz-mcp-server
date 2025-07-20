@@ -68,12 +68,12 @@ def check_environment():
     # Check dependencies
     try:
         import importlib.util
-        
+
         # Use importlib.util.find_spec for availability checks
         aiosqlite_spec = importlib.util.find_spec("aiosqlite")
         mcp_spec = importlib.util.find_spec("mcp")
         config_spec = importlib.util.find_spec("moneywiz_mcp_server.config")
-        
+
         if all([aiosqlite_spec, mcp_spec, config_spec]):
             print("✅ All core dependencies installed")
         else:

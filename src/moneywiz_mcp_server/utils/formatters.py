@@ -79,7 +79,7 @@ def parse_date(date_string: str) -> date:
 
     except (ValueError, TypeError) as e:
         logger.error(f"Failed to parse date '{date_string}': {e}")
-        raise ValueError(f"Invalid date format: {date_string}")
+        raise ValueError(f"Invalid date format: {date_string}") from e
 
 
 def format_date(dt: date | datetime | str, format_str: str = "%Y-%m-%d") -> str:
