@@ -26,7 +26,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp[cli]>=1.0.0",
     "aiosqlite>=0.19.0",
     "python-dateutil>=2.8.0",
     "pydantic>=2.0.0",
@@ -55,7 +55,7 @@ test = [
 ]
 
 [project.scripts]
-moneywiz-mcp-server = "moneywiz_mcp_server.server:cli_main"
+moneywiz-mcp-server = "moneywiz_mcp_server.main:cli_main"
 
 [project.urls]
 "Homepage" = "https://github.com/jcvalerio/moneywiz-mcp-server"
