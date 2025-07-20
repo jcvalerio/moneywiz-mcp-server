@@ -1,6 +1,6 @@
 """Entry point for python -m moneywiz_mcp_server."""
 
-from .server import cli_main
+from .main import cli_main
 
 if __name__ == "__main__":
     cli_main()
