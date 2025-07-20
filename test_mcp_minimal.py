@@ -4,20 +4,22 @@ Minimal MCP server test for Claude Desktop debugging
 """
 
 import asyncio
-import json
-import sys
 import os
+import sys
 
 # Set environment variables
-os.environ["MONEYWIZ_DB_PATH"] = "/Users/jcvalerio/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
+os.environ[
+    "MONEYWIZ_DB_PATH"
+] = "/Users/jcvalerio/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
 os.environ["MONEYWIZ_READ_ONLY"] = "true"
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
 # Create a minimal server
 server = Server("moneywiz-test")
+
 
 @server.list_tools()
 async def handle_list_tools() -> list[Tool]:
@@ -26,12 +28,10 @@ async def handle_list_tools() -> list[Tool]:
         Tool(
             name="test_connection",
             description="Test MoneyWiz MCP server connection",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
+            inputSchema={"type": "object", "properties": {}},
         )
     ]
+
 
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -40,6 +40,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text="✅ MoneyWiz MCP server is working!")]
     else:
         raise ValueError(f"Unknown tool: {name}")
+
 
 async def main():
     """Main entry point."""
@@ -51,6 +52,7 @@ async def main():
         print(f"Error: {e}", file=sys.stderr)
         return 1
     return 0
+
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
