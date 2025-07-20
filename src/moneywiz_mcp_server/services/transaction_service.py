@@ -144,9 +144,9 @@ class TransactionService:
             Dictionary with expense summary data
         """
         try:
-            # Get all expense transactions (negative amounts)
+            # Get all expense transactions (negative amounts, excluding transfers)
             transactions = await self.get_transactions(start_date, end_date)
-            expenses = [t for t in transactions if t.is_expense()]
+            expenses = [t for t in transactions if t.is_expense() and not t.is_transfer()]
             
             # Group expenses
             groups = {}
@@ -224,9 +224,9 @@ class TransactionService:
             # Get all transactions
             transactions = await self.get_transactions(start_date, end_date)
             
-            # Separate income and expenses
-            income_transactions = [t for t in transactions if t.is_income()]
-            expense_transactions = [t for t in transactions if t.is_expense()]
+            # Separate income and expenses (excluding transfers)
+            income_transactions = [t for t in transactions if t.is_income() and not t.is_transfer()]
+            expense_transactions = [t for t in transactions if t.is_expense() and not t.is_transfer()]
             
             # Calculate totals
             total_income = sum(t.amount for t in income_transactions)

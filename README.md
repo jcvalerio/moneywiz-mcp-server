@@ -32,11 +32,21 @@ python setup_env.py
 
 Ask Claude natural language questions about your finances:
 
+### 💰 Account & Transaction Management
 - **"Show me all my MoneyWiz accounts with their balances"**
+- **"Get details for my checking account including recent transactions"**
+- **"Search my transactions from last month in the Groceries category"**
+
+### 📊 Expense Analytics
 - **"Analyze my expenses for the last 3 months by category"**
 - **"What's my savings rate this year?"**
 - **"Which spending category impacts my finances the most?"**
-- **"Search my transactions from last month in the Groceries category"**
+
+### 💡 Advanced Analytics (New!)
+- **"Give me personalized savings recommendations with 25% target rate"**
+- **"Analyze my spending trends over the last 6 months"**
+- **"Show me category trends for my top 5 spending categories"**
+- **"Track my income vs expense trends for financial health"**
 
 ## 📋 Prerequisites
 
@@ -147,25 +157,27 @@ Choose one of these configurations:
 }
 ```
 
-#### Virtual Environment
+#### Virtual Environment (FastMCP Best Practice)
 ```json
 {
   "mcpServers": {
     "moneywiz": {
       "command": "/path/to/your/venv/bin/python",
-      "args": ["-m", "moneywiz_mcp_server"]
+      "args": ["-m", "moneywiz_mcp_server.main"],
+      "cwd": "/path/to/your/moneywiz-mcp-server"
     }
   }
 }
 ```
 
-#### With Custom Database Path
+#### With Custom Database Path (FastMCP Best Practice)
 ```json
 {
   "mcpServers": {
     "moneywiz": {
       "command": "python",
-      "args": ["-m", "moneywiz_mcp_server"],
+      "args": ["-m", "moneywiz_mcp_server.main"],
+      "cwd": "/path/to/your/moneywiz-mcp-server",
       "env": {
         "MONEYWIZ_DB_PATH": "/path/to/your/MoneyWiz.sqlite",
         "MONEYWIZ_READ_ONLY": "true"
@@ -226,13 +238,20 @@ Once configured, Claude will have access to these MoneyWiz tools:
 - **`analyze_expenses_by_category`** - Analyze spending patterns by category
 - **`analyze_income_vs_expenses`** - Compare income vs expenses with savings analysis
 
+### Advanced Analytics (Phase 3)
+- **`get_savings_recommendations`** - Personalized savings optimization with actionable tips
+- **`analyze_spending_trends`** - Statistical trend analysis with projections and insights
+- **`analyze_category_trends`** - Multi-category trend comparison and growth analysis
+- **`analyze_income_expense_trends`** - Income vs expense sustainability tracking
+
 ## 🔧 Technical Details
 
 ### Architecture
-- **MCP Server**: Modern decorator-based tool registration
+- **MCP Server**: Modern FastMCP with decorator-based tool registration
 - **Database**: Direct Core Data SQLite access (read-only by default)
-- **Safety**: Read-only mode by default
-- **Integration**: Seamless Claude Desktop integration
+- **Analytics**: Advanced savings optimization and trend analysis services
+- **Safety**: Read-only mode by default with comprehensive input validation
+- **Integration**: Seamless Claude Desktop integration with structured JSON responses
 
 ### Database Support
 - **MoneyWiz 3**: Full support for latest version including Setapp
