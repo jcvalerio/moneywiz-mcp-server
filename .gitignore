@@ -49,3 +49,8 @@ coverage.xml
 
 # Local config files
 claude_desktop_config_real.json
+
+# Personal development documentation
+specs/
+SESSION_CONTEXT.md
+CLAUDE.md
