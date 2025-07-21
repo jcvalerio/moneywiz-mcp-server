@@ -3,7 +3,7 @@
 repos:
   # Ruff - Ultra-fast Python linter and formatter (replaces flake8, isort, and more)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.15
+    rev: v0.12.4
     hooks:
       - id: ruff
         name: ruff (linter)
@@ -64,6 +64,17 @@ repos:
         name: debug statements (Python)
       - id: check-docstring-first
         name: check docstring is first
+
+  # Local CI Simulation (pre-push hook)
+  - repo: local
+    hooks:
+      - id: ci-simulation
+        name: Run CI simulation before push
+        entry: ./scripts/check-ci.sh
+        language: script
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
 
   # Conventional commits (optional but recommended)
   - repo: https://github.com/compilerla/conventional-pre-commit

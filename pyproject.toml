@@ -40,7 +40,7 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.0",
-    "ruff>=0.1.8",
+    "ruff==0.12.4",
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
     "bandit>=1.7.5",
@@ -187,7 +187,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["PLR2004", "S101", "TID252", "PLC0415", "E501"]
-"scripts/**/*" = ["T201"]
+"scripts/**/*" = ["T201", "S603", "S607"]  # Allow print, subprocess calls
 "**/test_*.py" = ["PLC0415", "E501", "ARG001"]
 "continue-development.py" = ["PLC0415"]
 "analyze_schema.py" = ["PLC0415"]

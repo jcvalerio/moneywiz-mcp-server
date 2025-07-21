@@ -13,8 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.12.7"  # Pin exact version for reproducibility
   MINIMUM_PYTHON_VERSION: "3.10"
+  RUFF_VERSION: "0.12.4"  # Pin exact Ruff version to match local
 
 jobs:
   # Code Quality Checks
@@ -35,6 +36,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+
+      - name: Report versions for transparency
+        run: |
+          echo "::group::Environment Information"
+          echo "Python version: $(python --version)"
+          echo "Ruff version: $(ruff --version)"
+          echo "Mypy version: $(mypy --version)"
+          echo "::endgroup::"
 
       - name: Run Ruff linter
         run: |
