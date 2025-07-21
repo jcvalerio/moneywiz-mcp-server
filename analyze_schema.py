@@ -27,8 +27,7 @@ def analyze_database():
             home / "Library/Containers/com.moneywiz.mac/Data/Documents",
             home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
             home
-            / "Library/Containers/com.moneywiz.personalfinance-setapp"
-            / "Data/Documents",
+            / "Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents",
             home / "Library/Application Support/MoneyWiz",
         ]
 
@@ -60,11 +59,13 @@ def analyze_database():
         print(f"  {col[1]} ({col[2]})")
 
     print("\n=== CATEGORY ENTITY ANALYSIS ===")
-    cursor.execute("""
+    cursor.execute(
+        """
     SELECT * FROM ZSYNCOBJECT
     WHERE Z_ENT = 19
     LIMIT 3
-    """)
+    """
+    )
 
     categories = cursor.fetchall()
     for i, cat in enumerate(categories):
@@ -76,7 +77,8 @@ def analyze_database():
         print()
 
     print("\n=== SAMPLE TRANSACTION WITH CATEGORY ===")
-    cursor.execute("""
+    cursor.execute(
+        """
     SELECT t.Z_PK, t.ZDESC2, t.ZAMOUNT1, ca.ZCATEGORY, c.ZNAME2 as category_name
     FROM ZSYNCOBJECT t
     LEFT JOIN ZCATEGORYASSIGMENT ca ON ca.ZTRANSACTION = t.Z_PK
@@ -85,7 +87,8 @@ def analyze_database():
     AND t.ZDESC2 IS NOT NULL
     AND ca.ZCATEGORY IS NOT NULL
     LIMIT 5
-    """)
+    """
+    )
 
     sample_txns = cursor.fetchall()
     print("Sample transactions with categories:")
@@ -96,12 +99,14 @@ def analyze_database():
         )
 
     print("\n=== TAG ANALYSIS ===")
-    cursor.execute("""
+    cursor.execute(
+        """
     SELECT Z_PK, ZNAME, ZNAME2
     FROM ZSYNCOBJECT
     WHERE Z_ENT = 35
     LIMIT 10
-    """)
+    """
+    )
 
     tags = cursor.fetchall()
     print(f"Found {len(tags)} tags:")
@@ -110,7 +115,8 @@ def analyze_database():
         print(f'  ID {tag["Z_PK"]}: "{name}"')
 
     print("\n=== TRANSACTION-TAG RELATIONSHIPS ===")
-    cursor.execute("""
+    cursor.execute(
+        """
     SELECT
         tt.Z_35TAGS as tag_id,
         tt.Z_36TRANSACTIONS as transaction_id,
@@ -120,7 +126,8 @@ def analyze_database():
     LEFT JOIN ZSYNCOBJECT t ON t.Z_PK = tt.Z_35TAGS AND t.Z_ENT = 35
     LEFT JOIN ZSYNCOBJECT txn ON txn.Z_PK = tt.Z_36TRANSACTIONS
     LIMIT 10
-    """)
+    """
+    )
 
     tag_relations = cursor.fetchall()
     print(f"Found {len(tag_relations)} tag-transaction relationships:")
@@ -129,12 +136,14 @@ def analyze_database():
         print(f'  Tag "{tag_name}" -> Transaction "{rel["transaction_desc"]}"')
 
     print("\n=== TRANSACTION FIELD ANALYSIS ===")
-    cursor.execute("""
+    cursor.execute(
+        """
     SELECT * FROM ZSYNCOBJECT
     WHERE Z_ENT IN (37, 45, 46, 47)
     AND ZDESC2 IS NOT NULL
     LIMIT 1
-    """)
+    """
+    )
 
     sample_txn = cursor.fetchone()
     if sample_txn:
