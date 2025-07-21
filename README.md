@@ -104,7 +104,7 @@ Create a `.env` file in the project root:
 # MoneyWiz Database Path
 MONEYWIZ_DB_PATH=/Users/yourusername/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite
 
-# Security Settings  
+# Security Settings
 MONEYWIZ_READ_ONLY=true
 
 # Optional Settings
@@ -233,7 +233,7 @@ Once configured, Claude will have access to these MoneyWiz tools:
 - **`list_accounts`** - List all accounts with balances and types
 - **`get_account`** - Get detailed account information by ID
 
-### Financial Analytics  
+### Financial Analytics
 - **`search_transactions`** - Search transactions with natural language time periods
 - **`analyze_expenses_by_category`** - Analyze spending patterns by category
 - **`analyze_income_vs_expenses`** - Compare income vs expenses with savings analysis
