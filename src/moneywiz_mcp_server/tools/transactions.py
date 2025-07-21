@@ -211,11 +211,12 @@ def analyze_expenses_by_category_tool(db_manager: DatabaseManager) -> Tool:
             categories = expense_summary["category_breakdown"][:top_categories]
 
             # Build response
+            top_categories_list: list[dict[str, Any]] = []
             result = {
                 "analysis_period": format_date_range_for_display(date_range),
                 "total_expenses": format_currency(float(total_expenses), "USD"),
                 "currency": "USD",
-                "top_categories": [],
+                "top_categories": top_categories_list,
                 "summary": {
                     "total_categories": len(expense_summary["category_breakdown"]),
                     "total_transactions": sum(

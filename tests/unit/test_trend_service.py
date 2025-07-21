@@ -310,7 +310,7 @@ class TestTrendService:
     def test_calculate_trend_metrics_empty(self, trend_service):
         """Test trend calculation with empty values."""
         # Arrange
-        values = []
+        values: list[float] = []
 
         # Act
         metrics = trend_service._calculate_trend_metrics(values)

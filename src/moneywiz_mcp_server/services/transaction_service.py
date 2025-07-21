@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 import logging
-from typing import Any
+from typing import Any, TypedDict
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.analytics_result import (
@@ -18,6 +18,13 @@ from moneywiz_mcp_server.models.transaction import (
 from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
 
 logger = logging.getLogger(__name__)
+
+
+class ExpenseGroupData(TypedDict):
+    """TypedDict for expense group aggregation data."""
+    total_amount: Decimal
+    transaction_count: int
+    transactions: list["TransactionModel"]
 
 
 class TransactionService:
@@ -111,11 +118,11 @@ class TransactionService:
 
             logger.debug(f"Executing transaction query with {len(params)} parameters")
 
-            # Execute query
-            rows = await self.db_manager.execute_query(query, params)
+            # Execute query (convert params list to tuple for database manager)
+            rows = await self.db_manager.execute_query(query, tuple(params))
 
             # Convert to TransactionModel objects
-            transactions = []
+            transactions: list[TransactionModel] = []
             for row in rows:
                 try:
                     transaction = TransactionModel.from_raw_data(row)
@@ -169,7 +176,7 @@ class TransactionService:
             ]
 
             # Group expenses
-            groups = {}
+            groups: dict[str, ExpenseGroupData] = {}
             total_expenses = Decimal("0")
 
             for expense in expenses:
@@ -184,18 +191,18 @@ class TransactionService:
                     group_key = "All Expenses"
 
                 if group_key not in groups:
-                    groups[group_key] = {
-                        "total_amount": Decimal("0"),
-                        "transaction_count": 0,
-                        "transactions": [],
-                    }
+                    groups[group_key] = ExpenseGroupData(
+                        total_amount=Decimal("0"),
+                        transaction_count=0,
+                        transactions=[],
+                    )
 
                 groups[group_key]["total_amount"] += amount
                 groups[group_key]["transaction_count"] += 1
                 groups[group_key]["transactions"].append(expense)
 
             # Calculate percentages and create CategoryExpense objects
-            category_expenses = []
+            category_expenses: list[CategoryExpense] = []
             for group_name, data in groups.items():
                 percentage = (
                     float(data["total_amount"] / total_expenses * 100)
@@ -251,8 +258,8 @@ class TransactionService:
             transactions = await self.get_transactions(start_date, end_date)
 
             # Separate income and expenses with smart transfer handling
-            income_transactions = []
-            expense_transactions = []
+            income_transactions: list[TransactionModel] = []
+            expense_transactions: list[TransactionModel] = []
 
             for t in transactions:
                 if t.is_expense() and not t.is_transfer():
@@ -270,9 +277,9 @@ class TransactionService:
                         # Note: We may need to adjust for exchange rate to avoid double-counting
 
             # Calculate totals
-            total_income = sum(t.amount for t in income_transactions)
+            total_income = sum((t.amount for t in income_transactions), Decimal("0"))
             total_expenses = sum(
-                abs(t.amount) for t in expense_transactions
+                (abs(t.amount) for t in expense_transactions), Decimal("0")
             )  # Make positive
             net_savings = total_income - total_expenses
             savings_rate = (
@@ -553,7 +560,7 @@ class TransactionService:
             )
 
             if tag_results:
-                tag_names = []
+                tag_names: list[str] = []
                 for tag_result in tag_results:
                     tag_id = tag_result["tag_id"]
 
@@ -616,7 +623,7 @@ class TransactionService:
 
         try:
             # Build hierarchy by traversing parent categories
-            hierarchy = []
+            hierarchy: list[str] = []
             current_id = transaction.category_id
             visited_ids = set()  # Prevent infinite loops
 

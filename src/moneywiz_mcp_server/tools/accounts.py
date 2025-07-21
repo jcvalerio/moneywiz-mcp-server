@@ -122,7 +122,7 @@ def list_accounts_tool(db_manager: DatabaseManager) -> Tool:
             )
             entity_types = {e["Z_ENT"]: e["Z_NAME"] for e in entity_map}
 
-            all_accounts = []
+            all_accounts: list[dict[str, Any]] = []
             for entity_id in account_entities:
                 query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ?"
                 accounts = await db_manager.execute_query(query, (entity_id,))

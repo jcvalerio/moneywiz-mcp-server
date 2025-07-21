@@ -413,7 +413,7 @@ class TrendService:
         self, trend_data: dict[str, Any], months_ahead: int = 3
     ) -> list[dict[str, Any]]:
         """Calculate spending projections based on trends."""
-        projections = []
+        projections: list[dict[str, Any]] = []
 
         if trend_data["direction"] == "insufficient_data":
             return projections
