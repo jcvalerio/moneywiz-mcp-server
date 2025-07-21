@@ -80,9 +80,10 @@ class TransactionService:
                 # Include all transaction types by default
                 transaction_entities.extend([38, 40, 41, 42, 43, 44])
 
-            # Build WHERE conditions
+            # Build WHERE conditions using safe parameter substitution
+            entity_placeholders = ",".join("?" for _ in transaction_entities)
             where_conditions = [
-                f"Z_ENT IN ({','.join('?' for _ in transaction_entities)})",
+                f"Z_ENT IN ({entity_placeholders})",  # nosec: B608 - Safe placeholder substitution
                 "ZDATE1 >= ?",
                 "ZDATE1 <= ?",
             ]
@@ -90,19 +91,23 @@ class TransactionService:
 
             # Add account filter
             if account_ids:
-                placeholders = ",".join("?" for _ in account_ids)
-                where_conditions.append(f"ZACCOUNT2 IN ({placeholders})")
+                account_placeholders = ",".join("?" for _ in account_ids)
+                where_conditions.append(f"ZACCOUNT2 IN ({account_placeholders})")  # nosec: B608 - Safe placeholder substitution
                 params.extend(account_ids)
 
-            # Build final query
-            query = f"""
+            # Build final query using safe parameter substitution
+            # nosec: B608 - Safe use of .format() with parameterized WHERE conditions
+            base_query = """
             SELECT * FROM ZSYNCOBJECT
-            WHERE {" AND ".join(where_conditions)}
+            WHERE {}
             ORDER BY ZDATE1 DESC
-            """
+            """.format(" AND ".join(where_conditions))  # nosec
 
             if limit:
-                query += f" LIMIT {limit}"
+                query = base_query + " LIMIT ?"
+                params.append(limit)
+            else:
+                query = base_query
 
             logger.debug(f"Executing transaction query with {len(params)} parameters")
 
