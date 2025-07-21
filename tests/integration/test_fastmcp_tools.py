@@ -41,7 +41,8 @@ class TestFastMCPToolsIntegration:
             delattr(mcp, "_config")
 
     @pytest.mark.asyncio
-    async def test_get_savings_recommendations_tool(self, _setup_mcp_config):
+    @pytest.mark.usefixtures("_setup_mcp_config")
+    async def test_get_savings_recommendations_tool(self):
         """Test get_savings_recommendations FastMCP tool."""
         # Mock database manager and services
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
@@ -101,7 +102,8 @@ class TestFastMCPToolsIntegration:
             mock_db.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_analyze_spending_trends_tool(self, _setup_mcp_config):
+    @pytest.mark.usefixtures("_setup_mcp_config")
+    async def test_analyze_spending_trends_tool(self):
         """Test analyze_spending_trends FastMCP tool."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
             mock_db = AsyncMock()
@@ -173,7 +175,8 @@ class TestFastMCPToolsIntegration:
             )
 
     @pytest.mark.asyncio
-    async def test_analyze_category_trends_tool(self, _setup_mcp_config):
+    @pytest.mark.usefixtures("_setup_mcp_config")
+    async def test_analyze_category_trends_tool(self):
         """Test analyze_category_trends FastMCP tool."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
             mock_db = AsyncMock()
@@ -250,7 +253,8 @@ class TestFastMCPToolsIntegration:
             )
 
     @pytest.mark.asyncio
-    async def test_analyze_income_expense_trends_tool(self, _setup_mcp_config):
+    @pytest.mark.usefixtures("_setup_mcp_config")
+    async def test_analyze_income_expense_trends_tool(self):
         """Test analyze_income_expense_trends FastMCP tool."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
             mock_db = AsyncMock()
@@ -324,7 +328,8 @@ class TestFastMCPToolsIntegration:
             )
 
     @pytest.mark.asyncio
-    async def test_database_connection_lifecycle(self, _setup_mcp_config):
+    @pytest.mark.usefixtures("_setup_mcp_config")
+    async def test_database_connection_lifecycle(self):
         """Test that database connections are properly managed in tools."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
             mock_db = AsyncMock()
@@ -348,7 +353,8 @@ class TestFastMCPToolsIntegration:
                 mock_db.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_error_handling_in_tools(self, _setup_mcp_config):
+    @pytest.mark.usefixtures("_setup_mcp_config")
+    async def test_error_handling_in_tools(self):
         """Test error handling in FastMCP tools."""
         with patch("moneywiz_mcp_server.main.get_db_manager") as mock_get_db:
             # Mock get_db_manager to raise an exception
