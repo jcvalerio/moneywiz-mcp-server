@@ -8,9 +8,9 @@ import os
 import sys
 
 # Set environment variables
-os.environ[
-    "MONEYWIZ_DB_PATH"
-] = "/Users/jcvalerio/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
+os.environ["MONEYWIZ_DB_PATH"] = (
+    "/Users/jcvalerio/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
+)
 os.environ["MONEYWIZ_READ_ONLY"] = "true"
 
 from mcp.server import Server

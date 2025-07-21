@@ -14,9 +14,20 @@ Usage:
 """
 
 import asyncio
+import importlib.util
 import os
 from pathlib import Path
 import sys
+
+# Optional imports for functionality testing (will be imported conditionally)
+try:
+    from moneywiz_mcp_server.config import Config
+    from moneywiz_mcp_server.database.connection import DatabaseManager
+    from moneywiz_mcp_server.tools.accounts import list_accounts_tool
+
+    MONEYWIZ_AVAILABLE = True
+except ImportError:
+    MONEYWIZ_AVAILABLE = False
 
 
 def print_banner():
@@ -67,8 +78,6 @@ def check_environment():
 
     # Check dependencies
     try:
-        import importlib.util
-
         # Use importlib.util.find_spec for availability checks
         aiosqlite_spec = importlib.util.find_spec("aiosqlite")
         mcp_spec = importlib.util.find_spec("mcp")
@@ -96,10 +105,10 @@ async def test_functionality():
     print("\n🧪 Testing Current Functionality...")
 
     try:
-        # Test imports
-        from moneywiz_mcp_server.config import Config
-        from moneywiz_mcp_server.database.connection import DatabaseManager
-        from moneywiz_mcp_server.tools.accounts import list_accounts_tool
+        # Check if modules are available
+        if not MONEYWIZ_AVAILABLE:
+            print("❌ MoneyWiz MCP server modules not available")
+            return False
 
         # Test configuration
         config = Config.from_env()
@@ -119,7 +128,7 @@ async def test_functionality():
         if accounts:
             print("   Sample accounts:")
             for i, acc in enumerate(accounts[:3]):
-                print(f"     {i+1}. {acc['name']} ({acc['type']}): {acc['balance']}")
+                print(f"     {i + 1}. {acc['name']} ({acc['type']}): {acc['balance']}")
 
         await db_manager.close()
 
@@ -184,7 +193,9 @@ def show_next_steps():
 
        # Sample different transaction types
        for entity_id in [37, 45, 46, 47]:
-           txns = await db.execute_query('SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ? LIMIT 1', (entity_id,))
+           txns = await db.execute_query(
+               'SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ? LIMIT 1', (entity_id,)
+           )
            if txns:
                print(f'Entity {entity_id} fields:', list(txns[0].keys())[:10])
 
@@ -255,9 +266,7 @@ def show_resources():
   2. Run: python test_mcp_connection.py
   3. Start development with transaction entity research
   4. Test changes with Claude Desktop integration
-""".format(
-            db_path=os.getenv("MONEYWIZ_DB_PATH", "Not set")
-        )
+""".format(db_path=os.getenv("MONEYWIZ_DB_PATH", "Not set"))
     )
 
 
@@ -306,7 +315,10 @@ Happy coding! 🚀
 if __name__ == "__main__":
     # Set up environment variables if not already set
     if not os.getenv("MONEYWIZ_DB_PATH"):
-        default_path = "/Users/jcvalerio/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
+        default_path = (
+            "/Users/jcvalerio/Library/Containers/"
+            "com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
+        )
         if Path(default_path).exists():
             os.environ["MONEYWIZ_DB_PATH"] = default_path
             os.environ["MONEYWIZ_READ_ONLY"] = "true"

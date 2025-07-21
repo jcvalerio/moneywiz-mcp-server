@@ -118,7 +118,9 @@ async def get_account(
     Returns:
         Detailed account information with optional transactions
     """
-    logger.info(f"🔍 Getting account {account_id} (transactions={include_transactions})")
+    logger.info(
+        f"🔍 Getting account {account_id} (transactions={include_transactions})"
+    )
 
     try:
         # Get database manager

@@ -1,6 +1,5 @@
 """Integration tests for category resolution - Debug uncategorized transactions issue."""
 
-
 import pytest
 
 from moneywiz_mcp_server.config import Config

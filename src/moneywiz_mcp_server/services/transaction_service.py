@@ -275,9 +275,7 @@ class TransactionService:
             )
 
             # Generate income breakdown
-            await self.get_expense_summary(
-                start_date, end_date, "category"
-            )
+            await self.get_expense_summary(start_date, end_date, "category")
             # Note: This would need to be adapted for income transactions
 
             # Generate expense breakdown
@@ -382,9 +380,9 @@ class TransactionService:
                     account_query, (transaction.account_id,)
                 )
                 if account_result:
-                    self._account_currency_cache[
-                        transaction.account_id
-                    ] = account_result[0]["ZCURRENCYNAME"]
+                    self._account_currency_cache[transaction.account_id] = (
+                        account_result[0]["ZCURRENCYNAME"]
+                    )
                 else:
                     self._account_currency_cache[transaction.account_id] = "USD"
 

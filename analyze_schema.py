@@ -14,7 +14,7 @@ def analyze_database():
     db_path = None
 
     if env_path.exists():
-        with open(env_path) as f:
+        with env_path.open() as f:
             for line in f:
                 if line.startswith("MONEYWIZ_DB_PATH="):
                     db_path = line.split("=", 1)[1].strip().strip('"')
@@ -26,7 +26,9 @@ def analyze_database():
         possible_paths = [
             home / "Library/Containers/com.moneywiz.mac/Data/Documents",
             home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
-            home / "Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents",
+            home
+            / "Library/Containers/com.moneywiz.personalfinance-setapp"
+            / "Data/Documents",
             home / "Library/Application Support/MoneyWiz",
         ]
 
@@ -39,7 +41,7 @@ def analyze_database():
             if db_path:
                 break
 
-    if not db_path or not os.path.exists(db_path):
+    if not db_path or not Path(db_path).exists():
         print("Database not found. Please run setup_env.py first.")
         return
 
@@ -66,7 +68,7 @@ def analyze_database():
 
     categories = cursor.fetchall()
     for i, cat in enumerate(categories):
-        print(f"Category {i+1}:")
+        print(f"Category {i + 1}:")
         for key in cat:
             value = cat[key]
             if value is not None and str(value).strip() != "":
@@ -88,7 +90,10 @@ def analyze_database():
     sample_txns = cursor.fetchall()
     print("Sample transactions with categories:")
     for txn in sample_txns:
-        print(f'  TXN {txn["Z_PK"]}: "{txn["ZDESC2"]}" Amount: {txn["ZAMOUNT1"]} Category: "{txn["category_name"]}"')
+        print(
+            f'  TXN {txn["Z_PK"]}: "{txn["ZDESC2"]}" Amount: '
+            f'{txn["ZAMOUNT1"]} Category: "{txn["category_name"]}"'
+        )
 
     print("\n=== TAG ANALYSIS ===")
     cursor.execute("""
@@ -140,6 +145,7 @@ def analyze_database():
                 print(f"  {key}: {value}")
 
     conn.close()
+
 
 if __name__ == "__main__":
     analyze_database()

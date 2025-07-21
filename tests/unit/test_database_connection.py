@@ -35,12 +35,15 @@ class TestDatabaseManager:
     @pytest.mark.asyncio
     async def test_initialize_read_only_mode(self, temp_database):
         """Test database initialization in read-only mode."""
-        with patch(
-            "moneywiz_mcp_server.database.connection.MoneywizApi"
-        ) as mock_api_class, patch(
-            "moneywiz_mcp_server.database.connection.aiosqlite.connect",
-            new_callable=AsyncMock,
-        ) as mock_connect:
+        with (
+            patch(
+                "moneywiz_mcp_server.database.connection.MoneywizApi"
+            ) as mock_api_class,
+            patch(
+                "moneywiz_mcp_server.database.connection.aiosqlite.connect",
+                new_callable=AsyncMock,
+            ) as mock_connect,
+        ):
             mock_api = Mock()
             mock_api_class.return_value = mock_api
             mock_connection = AsyncMock()
@@ -62,12 +65,15 @@ class TestDatabaseManager:
     @pytest.mark.asyncio
     async def test_initialize_read_write_mode(self, temp_database):
         """Test database initialization in read-write mode."""
-        with patch(
-            "moneywiz_mcp_server.database.connection.MoneywizApi"
-        ) as mock_api_class, patch(
-            "moneywiz_mcp_server.database.connection.aiosqlite.connect",
-            new_callable=AsyncMock,
-        ) as mock_connect:
+        with (
+            patch(
+                "moneywiz_mcp_server.database.connection.MoneywizApi"
+            ) as mock_api_class,
+            patch(
+                "moneywiz_mcp_server.database.connection.aiosqlite.connect",
+                new_callable=AsyncMock,
+            ) as mock_connect,
+        ):
             mock_api = Mock()
             mock_api_class.return_value = mock_api
             mock_connection = AsyncMock()

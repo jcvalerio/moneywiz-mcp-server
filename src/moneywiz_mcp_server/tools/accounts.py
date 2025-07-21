@@ -338,9 +338,9 @@ def get_account_tool(db_manager: DatabaseManager) -> Tool:
                     # For now, add placeholder - transactions would require understanding
                     # the transaction entity structure which is more complex
                     result["recent_transactions"] = []
-                    result[
-                        "transactions_note"
-                    ] = "Transaction history integration coming soon"
+                    result["transactions_note"] = (
+                        "Transaction history integration coming soon"
+                    )
 
                 except Exception as e:
                     logger.warning(

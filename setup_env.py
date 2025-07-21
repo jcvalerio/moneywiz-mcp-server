@@ -2,7 +2,8 @@
 """
 MoneyWiz MCP Server Environment Setup Script
 
-This script helps users configure their .env file with the correct MoneyWiz database path.
+This script helps users configure their .env file with the correct MoneyWiz
+database path.
 """
 
 import os
@@ -37,9 +38,13 @@ def find_moneywiz_database():
 
         # Look for SQLite database files
         for pattern in ["*.sqlite", "*.sqlite3", "*.db"]:
-            for db_file in base_path.glob(pattern):
-                if db_file.is_file() and db_file.stat().st_size > 0:
-                    found_databases.append(db_file)
+            found_databases.extend(
+                [
+                    db_file
+                    for db_file in base_path.glob(pattern)
+                    if db_file.is_file() and db_file.stat().st_size > 0
+                ]
+            )
 
     return found_databases
 
@@ -134,7 +139,7 @@ MAX_RESULTS=1000
 
     # Write .env file
     try:
-        with open(env_file, "w") as f:
+        with Path(env_file).open("w") as f:
             f.write(env_content)
 
         print(f"\n✅ Created .env file: {env_file}")

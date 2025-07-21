@@ -52,7 +52,8 @@ class DatabaseManager:
         """
         logger.info("Initializing database connections...")
 
-        # Initialize moneywiz-api (optional - will fallback to direct SQLite if not available)
+        # Initialize moneywiz-api (optional - will fallback to direct SQLite
+        # if not available)
         if MoneywizApi is None:
             logger.warning(
                 "moneywiz-api library not found. Using direct SQLite access only."
@@ -70,7 +71,8 @@ class DatabaseManager:
                 )
                 logger.info("Continuing with direct SQLite access only")
                 logger.info(
-                    "This may be due to database schema changes in the latest MoneyWiz version"
+                    "This may be due to database schema changes in the latest "
+                    "MoneyWiz version"
                 )
                 self._api = None
 

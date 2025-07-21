@@ -153,7 +153,8 @@ class Config:
             ValueError: If configuration is invalid
         """
         # Check database file exists
-        if not os.path.exists(self.database_path):
+        db_path = Path(self.database_path)
+        if not db_path.exists():
             raise ValueError(f"Database file not found: {self.database_path}")
 
         # Check database file is readable
@@ -161,7 +162,7 @@ class Config:
             raise ValueError(f"Database file not readable: {self.database_path}")
 
         # Check database file is not empty
-        if os.path.getsize(self.database_path) == 0:
+        if db_path.stat().st_size == 0:
             raise ValueError(f"Database file is empty: {self.database_path}")
 
         # Validate numeric settings

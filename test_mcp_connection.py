@@ -75,7 +75,9 @@ async def test_mcp_server():
 
         print(f"   ✅ Found {len(accounts)} accounts")
         if len(accounts) > 0:
-            print(f"   ✅ Sample account: {accounts[0]['name']} ({accounts[0]['type']})")
+            print(
+                f"   ✅ Sample account: {accounts[0]['name']} ({accounts[0]['type']})"
+            )
 
         await db_manager.close()
     except Exception as e:
@@ -88,9 +90,9 @@ async def test_mcp_server():
 
 if __name__ == "__main__":
     # Set environment variables for testing
-    os.environ[
-        "MONEYWIZ_DB_PATH"
-    ] = "/Users/jcvalerio/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
+    os.environ["MONEYWIZ_DB_PATH"] = (
+        "/Users/jcvalerio/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite"
+    )
     os.environ["MONEYWIZ_READ_ONLY"] = "true"
 
     success = asyncio.run(test_mcp_server())

@@ -104,9 +104,9 @@ def search_transactions_tool(db_manager: DatabaseManager) -> Tool:
                         float(transaction.original_amount or 0),
                         transaction.original_currency,
                     )
-                    formatted_transaction[
-                        "original_currency"
-                    ] = transaction.original_currency
+                    formatted_transaction["original_currency"] = (
+                        transaction.original_currency
+                    )
 
                 result.append(formatted_transaction)
 
