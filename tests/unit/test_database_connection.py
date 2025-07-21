@@ -52,8 +52,10 @@ class TestDatabaseManager:
             manager = DatabaseManager(temp_database, read_only=True)
             await manager.initialize()
 
-            # Verify MoneywizApi was initialized with correct path
-            mock_api_class.assert_called_once_with(temp_database)
+            # Verify MoneywizApi was initialized with correct path (as Path object)
+            from pathlib import Path
+
+            mock_api_class.assert_called_once_with(Path(temp_database))
             assert manager._api == mock_api
 
             # Verify SQLite connection was made with read-only URI
@@ -120,7 +122,7 @@ class TestDatabaseManager:
         """Test api property when not initialized."""
         manager = DatabaseManager("/test/path")
 
-        with pytest.raises(RuntimeError, match="Database not initialized"):
+        with pytest.raises(RuntimeError, match="MoneywizApi not available"):
             _ = manager.api
 
     @pytest.mark.unit

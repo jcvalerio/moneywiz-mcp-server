@@ -72,14 +72,16 @@ def mock_moneywiz_api():
 
 
 @pytest.fixture
-async def temp_database():
+def temp_database():
     """Create a temporary SQLite database for testing."""
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
         db_path = tmp.name
 
-    # Create basic tables for testing
-    async with aiosqlite.connect(db_path) as db:
-        await db.execute(
+    # Create basic tables for testing using sqlite3 (sync)
+    import sqlite3
+
+    with sqlite3.connect(db_path) as db:
+        db.execute(
             """
             CREATE TABLE accounts (
                 id TEXT PRIMARY KEY,
@@ -92,7 +94,7 @@ async def temp_database():
         """
         )
 
-        await db.execute(
+        db.execute(
             """
             CREATE TABLE transactions (
                 id TEXT PRIMARY KEY,
@@ -108,21 +110,21 @@ async def temp_database():
         )
 
         # Insert test data
-        await db.execute(
+        db.execute(
             """
             INSERT INTO accounts (id, name, type, balance, currency)
             VALUES ('acc1', 'Test Checking', 'checking', 1500.50, 'USD')
         """
         )
 
-        await db.execute(
+        db.execute(
             """
             INSERT INTO transactions (id, account_id, date, amount, payee, category)
             VALUES ('txn1', 'acc1', '2024-01-15', -25.50, 'Coffee Shop', 'Dining')
         """
         )
 
-        await db.commit()
+        db.commit()
 
     yield db_path
 
@@ -148,35 +150,134 @@ def mock_database_manager(mock_moneywiz_api, temp_database):
     async def mock_execute_query(query: str, params=None):
         """Mock execute_query that returns appropriate data based on the query."""
         if "Z_PRIMARYKEY" in query and "Z_ENT" in query:
-            # Entity type mapping query
+            # Entity type mapping query - using the exact names expected by accounts.py
             return [
-                {"Z_ENT": 10, "Z_NAME": "BankCheque"},  # Checking account
-                {"Z_ENT": 11, "Z_NAME": "BankSaving"},  # Savings account
-                {"Z_ENT": 12, "Z_NAME": "Cash"},
-                {"Z_ENT": 13, "Z_NAME": "CreditCard"},
+                {"Z_ENT": 10, "Z_NAME": "BankChequeAccount"},  # Checking account
+                {"Z_ENT": 11, "Z_NAME": "BankSavingAccount"},  # Savings account
+                {"Z_ENT": 12, "Z_NAME": "CashAccount"},
+                {"Z_ENT": 13, "Z_NAME": "CreditCardAccount"},
             ]
         elif "ZOPENINGBALANCE" in query and "Z_PK" in query:
             # Balance query for specific account
             if params:
                 account_id = params[0]
-                if account_id == 1:
-                    return [{"ZOPENINGBALANCE": 1000.0}]
-                elif account_id == 2:
-                    return [{"ZOPENINGBALANCE": 5000.0}]
+                balance_map = {
+                    1: [{"ZOPENINGBALANCE": 1000.0}],
+                    2: [{"ZOPENINGBALANCE": 5000.0}],
+                    3: [{"ZOPENINGBALANCE": 100.0}],
+                }
+                return balance_map.get(account_id, [{"ZOPENINGBALANCE": 0.0}])
             return [{"ZOPENINGBALANCE": 0.0}]
         elif "ZAMOUNT1" in query and "ZACCOUNT2" in query:
             # Transaction amounts query for balance calculation
             if params:
                 account_id = params[0]
-                if account_id == 1:
-                    return [{"ZAMOUNT1": 500.0}, {"ZAMOUNT1": -25.50}]  # Net +474.50
-                elif account_id == 2:
-                    return [{"ZAMOUNT1": 100.0}]  # Net +100.0
+                transaction_map = {
+                    1: [{"ZAMOUNT1": 500.0}, {"ZAMOUNT1": -25.50}],  # Net +474.50
+                    2: [{"ZAMOUNT1": 100.0}],  # Net +100.0
+                    3: [
+                        {"ZAMOUNT1": 0.0}
+                    ],  # Net 0.0 (balance stays at opening balance)
+                }
+                return transaction_map.get(account_id, [])
             return []
         elif "ZSYNCOBJECT" in query and "Z_ENT" in query and params:
-            # Account data query - return different accounts based on entity type
+            # Account data query - could be list query or get specific account query
+            if len(params) == 1:
+                # List accounts query (entity_id only)
+                entity_id = params[0]
+            elif len(params) == 3:
+                # Get specific account query (entity_id, account_id, pk_value)
+                entity_id, account_id, pk_value = params
+                # Return specific account based on account_id
+                if entity_id == 10 and (account_id == "acc1" or pk_value == 1):
+                    return [
+                        {
+                            "Z_PK": 1,
+                            "Z_ENT": 10,
+                            "ZNAME": "Test Checking",
+                            "ZGID": "acc1",
+                            "ZACCOUNTTYPEIDENTIFIER": "checking",
+                            "ZOPENINGBALANCE": 1000.0,
+                            "ZARCHIVED": 0,
+                            "ZCURRENCY": "USD",
+                            "ZCURRENCYNAME": "USD",
+                            "ZINSTITUTIONNAME": "Test Bank",
+                            "ZOBJECTCREATIONDATE": "2024-01-01",
+                            "ZBANKWEBSITEURL": "Test Bank",
+                            "ZINFO": "Test account info",
+                            "ZLASTFOURDIGITS": "1234",
+                        }
+                    ]
+                elif entity_id == 11 and (account_id == "acc2" or pk_value == 2):
+                    return [
+                        {
+                            "Z_PK": 2,
+                            "Z_ENT": 11,
+                            "ZNAME": "Test Savings",
+                            "ZGID": "acc2",
+                            "ZACCOUNTTYPEIDENTIFIER": "savings",
+                            "ZOPENINGBALANCE": 5000.0,
+                            "ZARCHIVED": 0,
+                            "ZCURRENCY": "USD",
+                            "ZCURRENCYNAME": "USD",
+                            "ZINSTITUTIONNAME": "Test Bank",
+                            "ZOBJECTCREATIONDATE": "2024-01-01",
+                            "ZBANKWEBSITEURL": "Test Bank",
+                            "ZINFO": "Test savings account",
+                            "ZLASTFOURDIGITS": "5678",
+                        }
+                    ]
+                else:
+                    return []  # Account not found
+            elif len(params) == 2:
+                # Get specific account query by ZGID only (entity_id, account_id)
+                entity_id, account_id = params
+                # Same logic as above but without pk_value
+                if entity_id == 10 and account_id == "acc1":
+                    return [
+                        {
+                            "Z_PK": 1,
+                            "Z_ENT": 10,
+                            "ZNAME": "Test Checking",
+                            "ZGID": "acc1",
+                            "ZACCOUNTTYPEIDENTIFIER": "checking",
+                            "ZOPENINGBALANCE": 1000.0,
+                            "ZARCHIVED": 0,
+                            "ZCURRENCY": "USD",
+                            "ZCURRENCYNAME": "USD",
+                            "ZINSTITUTIONNAME": "Test Bank",
+                            "ZOBJECTCREATIONDATE": "2024-01-01",
+                            "ZBANKWEBSITEURL": "Test Bank",
+                            "ZINFO": "Test account info",
+                            "ZLASTFOURDIGITS": "1234",
+                        }
+                    ]
+                elif entity_id == 11 and account_id == "acc2":
+                    return [
+                        {
+                            "Z_PK": 2,
+                            "Z_ENT": 11,
+                            "ZNAME": "Test Savings",
+                            "ZGID": "acc2",
+                            "ZACCOUNTTYPEIDENTIFIER": "savings",
+                            "ZOPENINGBALANCE": 5000.0,
+                            "ZARCHIVED": 0,
+                            "ZCURRENCY": "USD",
+                            "ZCURRENCYNAME": "USD",
+                            "ZINSTITUTIONNAME": "Test Bank",
+                            "ZOBJECTCREATIONDATE": "2024-01-01",
+                            "ZBANKWEBSITEURL": "Test Bank",
+                            "ZINFO": "Test savings account",
+                            "ZLASTFOURDIGITS": "5678",
+                        }
+                    ]
+                else:
+                    return []  # Account not found
+
+            # List accounts query (original logic)
             entity_id = params[0]
-            if entity_id == 10:  # BankCheque - for checking account (comes first)
+            if entity_id == 10:  # BankCheque - for checking accounts
                 return [
                     {
                         "Z_PK": 1,
@@ -185,13 +286,25 @@ def mock_database_manager(mock_moneywiz_api, temp_database):
                         "ZGID": "acc1",
                         "ZACCOUNTTYPEIDENTIFIER": "checking",
                         "ZOPENINGBALANCE": 1000.0,
-                        "ZISHIDDEN": 0,
+                        "ZARCHIVED": 0,  # Use ZARCHIVED instead of ZISHIDDEN
                         "ZCURRENCY": "USD",
                         "ZCURRENCYNAME": "USD",
                         "ZINSTITUTIONNAME": "Test Bank",
-                    }
+                    },
+                    {
+                        "Z_PK": 3,
+                        "Z_ENT": 10,
+                        "ZNAME": "Hidden Account",
+                        "ZGID": "acc3",
+                        "ZACCOUNTTYPEIDENTIFIER": "checking",
+                        "ZOPENINGBALANCE": 100.0,
+                        "ZARCHIVED": 1,  # This account is hidden/archived
+                        "ZCURRENCY": "USD",
+                        "ZCURRENCYNAME": "USD",
+                        "ZINSTITUTIONNAME": "Test Bank",
+                    },
                 ]
-            elif entity_id == 11:  # BankSaving - for savings account (comes second)
+            elif entity_id == 11:  # BankSaving - for savings account
                 return [
                     {
                         "Z_PK": 2,
@@ -200,7 +313,7 @@ def mock_database_manager(mock_moneywiz_api, temp_database):
                         "ZGID": "acc2",
                         "ZACCOUNTTYPEIDENTIFIER": "savings",
                         "ZOPENINGBALANCE": 5000.0,
-                        "ZISHIDDEN": 0,
+                        "ZARCHIVED": 0,
                         "ZCURRENCY": "USD",
                         "ZCURRENCYNAME": "USD",
                         "ZINSTITUTIONNAME": "Test Bank",

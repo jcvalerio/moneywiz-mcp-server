@@ -47,17 +47,17 @@ def format_currency(amount: float, currency: str = "USD") -> str:
         return f"{currency} {amount:.2f}"
 
 
-def parse_date(date_string: str) -> date:
-    """Parse date string into date object.
+def parse_date(date_input: str | date | datetime) -> date:
+    """Parse date input into date object.
 
     Args:
-        date_string: Date string in various formats
+        date_input: Date input in various formats (string, date, or datetime)
 
     Returns:
         Parsed date object
 
     Raises:
-        ValueError: If date string cannot be parsed
+        ValueError: If date input cannot be parsed
 
     Example:
         >>> parse_date("2024-01-15")
@@ -67,19 +67,19 @@ def parse_date(date_string: str) -> date:
     """
     try:
         # Handle common date formats
-        if isinstance(date_string, date):
-            return date_string
+        if isinstance(date_input, date):
+            return date_input
 
-        if isinstance(date_string, datetime):
-            return date_string.date()
+        if isinstance(date_input, datetime):
+            return date_input.date()
 
         # Parse string using dateutil parser
-        parsed_dt = parser.parse(date_string)
+        parsed_dt = parser.parse(date_input)
         return parsed_dt.date()
 
     except (ValueError, TypeError) as e:
-        logger.error(f"Failed to parse date '{date_string}': {e}")
-        raise ValueError(f"Invalid date format: {date_string}") from e
+        logger.error(f"Failed to parse date '{date_input}': {e}")
+        raise ValueError(f"Invalid date format: {date_input}") from e
 
 
 def format_date(dt: date | datetime | str, format_str: str = "%Y-%m-%d") -> str:
