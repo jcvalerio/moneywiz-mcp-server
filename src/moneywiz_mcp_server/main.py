@@ -23,7 +23,8 @@ from .models.savings_responses import (
     SavingsOptimizationResponse,
     SpendingTrendResponse,
 )
-from .utils.env_loader import load_env_file
+from .services.savings_service import SavingsService
+from .services.trend_service import TrendService
 
 # Import tools at top level to avoid PLC0415 errors
 from .tools.accounts import get_account_tool, list_accounts_tool
@@ -32,12 +33,13 @@ from .tools.transactions import (
     analyze_income_vs_expenses_tool,
     search_transactions_tool,
 )
-from .tools.analytics import (
-    get_category_trends_tool,
-    get_income_vs_expense_trends_tool,
-    get_savings_recommendations_tool,
-    get_spending_trends_tool,
+
+# Import additional utilities to avoid inline imports
+from .utils.date_utils import (
+    format_date_range_for_display,
+    parse_natural_language_date,
 )
+from .utils.env_loader import load_env_file
 
 # Configure logging to stderr (MCP best practice)
 logging.basicConfig(
