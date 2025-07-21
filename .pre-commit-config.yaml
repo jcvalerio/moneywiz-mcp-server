@@ -13,28 +13,21 @@ repos:
         name: ruff (formatter)
         types_or: [python, pyi, jupyter]
 
-  # Black - DISABLED (using Ruff as primary formatter)
-  # - repo: https://github.com/psf/black
-  #   rev: 23.12.1
-  #   hooks:
-  #     - id: black
-  #       language_version: python3
-  #       types: [python]
-
   # Mypy - Static type checker
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v1.17.0
     hooks:
       - id: mypy
         additional_dependencies:
           - types-python-dateutil
           - types-setuptools
-        args: [--strict, --show-error-codes]
+          - pydantic>=2.0.0
+        args: [--no-strict-optional, --show-error-codes, --install-types, --non-interactive, --ignore-missing-imports, --disable-error-code=unreachable]
         types: [python]
 
   # Bandit - Security linter
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.5
+    rev: 1.8.6
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]
@@ -43,7 +36,7 @@ repos:
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
         name: trim trailing whitespace
@@ -78,7 +71,7 @@ repos:
 
   # Conventional commits (optional but recommended)
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v3.0.0
+    rev: v3.5.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]

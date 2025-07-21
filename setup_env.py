@@ -11,7 +11,7 @@ from pathlib import Path
 import sys
 
 
-def find_moneywiz_database():
+def find_moneywiz_database() -> list[Path]:
     """Find MoneyWiz database on macOS."""
     # Verify we're on macOS
     if os.name != "posix" or not hasattr(os, "uname") or os.uname().sysname != "Darwin":
@@ -49,7 +49,7 @@ def find_moneywiz_database():
     return found_databases
 
 
-def create_env_file():
+def create_env_file() -> None:
     """Create .env file with user configuration."""
     # Platform check
     if os.name != "posix" or not hasattr(os, "uname") or os.uname().sysname != "Darwin":

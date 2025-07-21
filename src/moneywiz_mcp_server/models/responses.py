@@ -1,5 +1,7 @@
 """Pydantic response models for structured MCP output."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -21,7 +23,9 @@ class AccountListResponse(BaseModel):
 
     accounts: list[AccountResponse] = Field(..., description="List of accounts")
     total_count: int = Field(..., description="Total number of accounts")
-    filters_applied: dict = Field(default_factory=dict, description="Applied filters")
+    filters_applied: dict[str, Any] = Field(
+        default_factory=dict, description="Applied filters"
+    )
 
 
 class AccountDetailResponse(AccountResponse):
@@ -31,7 +35,7 @@ class AccountDetailResponse(AccountResponse):
     institution: str = Field(..., description="Financial institution")
     account_info: str = Field(..., description="Additional account information")
     last_four_digits: str = Field(..., description="Last four digits of account number")
-    recent_transactions: list[dict] = Field(
+    recent_transactions: list[dict[str, Any]] = Field(
         default_factory=list, description="Recent transactions"
     )
 
@@ -60,7 +64,9 @@ class TransactionListResponse(BaseModel):
     )
     total_count: int = Field(..., description="Total number of transactions found")
     date_range: str = Field(..., description="Date range searched")
-    filters_applied: dict = Field(default_factory=dict, description="Applied filters")
+    filters_applied: dict[str, Any] = Field(
+        default_factory=dict, description="Applied filters"
+    )
 
 
 class CategoryExpenseResponse(BaseModel):
@@ -86,8 +92,8 @@ class ExpenseAnalysisResponse(BaseModel):
     top_categories: list[CategoryExpenseResponse] = Field(
         ..., description="Top expense categories"
     )
-    summary: dict = Field(..., description="Analysis summary statistics")
-    insights: dict | None = Field(
+    summary: dict[str, Any] = Field(..., description="Analysis summary statistics")
+    insights: dict[str, Any] | None = Field(
         None, description="Analysis insights and recommendations"
     )
 
@@ -117,7 +123,9 @@ class IncomeVsExpensesResponse(BaseModel):
     financial_overview: FinancialOverviewResponse = Field(
         ..., description="Financial overview"
     )
-    expense_breakdown: list[dict] = Field(..., description="Top expense categories")
+    expense_breakdown: list[dict[str, Any]] = Field(
+        ..., description="Top expense categories"
+    )
     savings_analysis: SavingsAnalysisResponse = Field(
         ..., description="Savings analysis"
     )
@@ -128,4 +136,4 @@ class ErrorResponse(BaseModel):
 
     error: str = Field(..., description="Error message")
     error_type: str = Field(..., description="Type of error")
-    details: dict | None = Field(None, description="Additional error details")
+    details: dict[str, Any] | None = Field(None, description="Additional error details")

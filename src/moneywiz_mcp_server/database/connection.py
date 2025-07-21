@@ -173,7 +173,7 @@ class DatabaseManager:
             raise
 
     async def execute_query(
-        self, query: str, params: tuple | None = None
+        self, query: str, params: tuple[Any, ...] | None = None
     ) -> list[dict[str, Any]]:
         """Execute a SELECT query and return results as dictionaries.
 

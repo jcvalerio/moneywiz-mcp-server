@@ -52,8 +52,9 @@ def load_env_file(env_path: Path | None = None) -> None:
                     if key not in os.environ:
                         os.environ[key] = value
 
-    except Exception:
-        # Silently ignore errors - .env is optional
+    except Exception:  # nosec B110 - .env loading is intentionally optional
+        # Silently ignore errors - .env is optional for development
+        # Using pass here is intentional as missing .env files are expected
         pass
 
 
