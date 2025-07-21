@@ -80,14 +80,14 @@ jobs:
           name: bandit-results
           path: bandit-report.json
 
-  # Test Matrix
+  # Test Matrix - macOS only since MoneyWiz is Mac-specific
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest]  # MoneyWiz MCP server is macOS-only
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
@@ -111,7 +111,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
-        if: matrix.python-version == env.PYTHON_VERSION && matrix.os == 'ubuntu-latest'
+        if: matrix.python-version == env.PYTHON_VERSION && matrix.os == 'macos-latest'
         with:
           file: ./coverage.xml
           fail_ci_if_error: true
@@ -169,7 +169,7 @@ jobs:
   # Integration test with actual MCP server
   integration:
     name: Integration Test
-    runs-on: ubuntu-latest
+    runs-on: macos-latest  # MoneyWiz MCP server is macOS-only
     needs: [code-quality]
     steps:
       - name: Checkout code

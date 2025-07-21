@@ -22,7 +22,14 @@ repos:
           - types-python-dateutil
           - types-setuptools
           - pydantic>=2.0.0
-        args: [--no-strict-optional, --show-error-codes, --install-types, --non-interactive, --ignore-missing-imports, --disable-error-code=unreachable,no-untyped-def,no-untyped-call,misc,arg-type,operator,attr-defined,var-annotated]
+        args:
+          - --no-strict-optional
+          - --show-error-codes
+          - --install-types
+          - --non-interactive
+          - --ignore-missing-imports
+          - --disable-error-code=unreachable
+          - --disable-error-code=no-untyped-def
         types: [python]
 
   # Bandit - Security linter
