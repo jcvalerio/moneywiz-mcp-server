@@ -33,14 +33,14 @@ jobs:
       - name: Run Safety check
         run: |
           echo "::group::Safety Check"
-          safety check --json --output safety-report.json || true
+          safety check --json --output safety-report.json
           safety check
           echo "::endgroup::"
 
       - name: Run pip-audit
         run: |
           echo "::group::Pip Audit"
-          pip-audit --format=json --output=pip-audit-report.json || true
+          pip-audit --format=json --output=pip-audit-report.json
           pip-audit
           echo "::endgroup::"
 
@@ -72,8 +72,8 @@ jobs:
       - name: Check for dependency updates
         run: |
           echo "::group::Dependency Updates"
-          pip-compile --upgrade --resolver=backtracking pyproject.toml --extra=dev --output-file=requirements-dev.txt || true
-          pip-compile --upgrade --resolver=backtracking pyproject.toml --output-file=requirements.txt || true
+          pip-compile --upgrade --resolver=backtracking pyproject.toml --extra=dev --output-file=requirements-dev.txt
+          pip-compile --upgrade --resolver=backtracking pyproject.toml --output-file=requirements.txt
           echo "::endgroup::"
 
       - name: Check dependency tree

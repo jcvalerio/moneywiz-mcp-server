@@ -13,16 +13,35 @@ class TestCategoryResolution:
 
     @pytest.fixture
     async def real_db_manager(self):
-        """Create a real database manager for integration testing."""
+        """Create a database manager for integration testing."""
+        db_manager = None
         try:
+            # Try to use real database first
             config = Config.from_env()
             db_manager = DatabaseManager(config.database_path, read_only=True)
             await db_manager.initialize()
+            print("✅ Using real MoneyWiz database for integration tests")
             yield db_manager
-        except Exception as e:
-            pytest.skip(f"Cannot connect to real database: {e}")
+        except Exception:
+            # Fall back to test database
+            if db_manager:
+                await db_manager.close()
+
+            from pathlib import Path
+
+            # Use test database
+            test_db_path = (
+                Path(__file__).parent.parent / "fixtures" / "sample_moneywiz.sqlite"
+            )
+            if not test_db_path.exists():
+                pytest.skip(f"Test database not found at {test_db_path}")
+
+            db_manager = DatabaseManager(str(test_db_path), read_only=True)
+            await db_manager.initialize()
+            print("🧪 Using test database for integration tests")
+            yield db_manager
         finally:
-            if "db_manager" in locals():
+            if db_manager:
                 await db_manager.close()
 
     @pytest.mark.integration
@@ -180,9 +199,6 @@ class TestCategoryResolution:
 
         for raw_tx in raw_transactions[:5]:
             # Create basic transaction model
-            import datetime
-            from decimal import Decimal
-
             from moneywiz_mcp_server.models.transaction import TransactionModel
 
             # Use the proper factory method to create transaction with all required fields
