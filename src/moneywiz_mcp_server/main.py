@@ -25,6 +25,20 @@ from .models.savings_responses import (
 )
 from .utils.env_loader import load_env_file
 
+# Import tools at top level to avoid PLC0415 errors
+from .tools.accounts import get_account_tool, list_accounts_tool
+from .tools.transactions import (
+    analyze_expenses_by_category_tool,
+    analyze_income_vs_expenses_tool,
+    search_transactions_tool,
+)
+from .tools.analytics import (
+    get_category_trends_tool,
+    get_income_vs_expense_trends_tool,
+    get_savings_recommendations_tool,
+    get_spending_trends_tool,
+)
+
 # Configure logging to stderr (MCP best practice)
 logging.basicConfig(
     level=logging.INFO,
@@ -76,9 +90,6 @@ async def list_accounts(
         db_manager = await get_db_manager()
 
         try:
-            # Import here to avoid circular imports
-            from .tools.accounts import list_accounts_tool
-
             # Create tool instance and get results
             tool = list_accounts_tool(db_manager)
             accounts_data = await tool.handler(
@@ -127,8 +138,6 @@ async def get_account(
         db_manager = await get_db_manager()
 
         try:
-            from .tools.accounts import get_account_tool
-
             tool = get_account_tool(db_manager)
             account_data = await tool.handler(
                 account_id=account_id, include_transactions=include_transactions
@@ -174,7 +183,6 @@ async def search_transactions(
         db_manager = await get_db_manager()
 
         try:
-            from .tools.transactions import search_transactions_tool
             from .utils.date_utils import (
                 format_date_range_for_display,
                 parse_natural_language_date,
@@ -233,7 +241,6 @@ async def analyze_expenses_by_category(
         db_manager = await get_db_manager()
 
         try:
-            from .tools.transactions import analyze_expenses_by_category_tool
 
             tool = analyze_expenses_by_category_tool(db_manager)
             analysis_data = await tool.handler(
@@ -269,7 +276,6 @@ async def analyze_income_vs_expenses(
         db_manager = await get_db_manager()
 
         try:
-            from .tools.transactions import analyze_income_vs_expenses_tool
 
             tool = analyze_income_vs_expenses_tool(db_manager)
             analysis_data = await tool.handler(time_period=time_period)
