@@ -124,9 +124,7 @@ class SavingsService:
             },
             "recommendations": sorted(
                 recommendations, key=lambda x: x.get("priority_score", 0), reverse=True
-            )[
-                :10
-            ],  # Top 10 recommendations
+            )[:10],  # Top 10 recommendations
             "insights": {
                 "fixed_vs_variable": fixed_variable["insights"],
                 "spending_patterns": spending_patterns["insights"],

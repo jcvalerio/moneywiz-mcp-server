@@ -187,9 +187,7 @@ class TestGetAccountTool:
         mock_database_manager.api.account_manager.get_account.return_value = (
             account_data
         )
-        mock_database_manager.api.transaction_manager.get_transactions_for_account.return_value = (
-            transaction_data
-        )
+        mock_database_manager.api.transaction_manager.get_transactions_for_account.return_value = transaction_data
 
         tool = get_account_tool(mock_database_manager)
         result = await tool.handler(account_id="acc1", include_transactions=True)

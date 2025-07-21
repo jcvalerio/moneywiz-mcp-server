@@ -244,7 +244,9 @@ def analyze_expenses_by_category_tool(db_manager: DatabaseManager) -> Tool:
                     "impact_level": (
                         "high"
                         if category.percentage_of_total > 20
-                        else "medium" if category.percentage_of_total > 10 else "low"
+                        else "medium"
+                        if category.percentage_of_total > 10
+                        else "low"
                     ),
                 }
                 result["top_categories"].append(category_data)
