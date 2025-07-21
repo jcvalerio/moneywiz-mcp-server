@@ -149,7 +149,9 @@ class TransactionModel:
             reconciled=bool(row.get("ZRECONCILED", 0)),
             transaction_type=transaction_type,
             category=None,  # Will be resolved via ZCATEGORYASSIGMENT
-            category_id=None,  # Will be resolved via ZCATEGORYASSIGMENT
+            category_id=row.get(
+                "ZCATEGORY2"
+            ),  # Direct category reference or via ZCATEGORYASSIGMENT
             parent_category=None,  # Will be resolved with hierarchy
             parent_category_id=None,  # Will be resolved with hierarchy
             category_path=None,  # Will be built from hierarchy
