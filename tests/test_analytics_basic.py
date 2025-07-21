@@ -150,10 +150,4 @@ async def test_transaction_service_get_transactions():
     assert mock_db.execute_query.called
 
 
-if __name__ == "__main__":
-    # Run basic tests
-    test_date_range_from_months()
-    test_parse_natural_language_date()
-    test_transaction_model_from_raw_data()
-    test_transaction_expense_income_classification()
-    print("✅ All basic tests passed!")
+# Removed standalone runner - use pytest instead

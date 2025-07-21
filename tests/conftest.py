@@ -331,7 +331,7 @@ def mock_database_manager(mock_moneywiz_api, temp_database):
     return manager
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def sample_account_data() -> list[dict[str, Any]]:
     """Sample account data for testing."""
     return [
@@ -362,7 +362,7 @@ def sample_account_data() -> list[dict[str, Any]]:
     ]
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def sample_transaction_data() -> list[dict[str, Any]]:
     """Sample transaction data for testing."""
     return [

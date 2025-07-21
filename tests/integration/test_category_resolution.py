@@ -183,32 +183,13 @@ class TestCategoryResolution:
             import datetime
             from decimal import Decimal
 
-            from moneywiz_mcp_server.models.transaction import (
-                TransactionModel,
-                TransactionType,
-            )
+            from moneywiz_mcp_server.models.transaction import TransactionModel
 
-            transaction = TransactionModel(
-                id=str(raw_tx["Z_PK"]),
-                entity_id=raw_tx["Z_ENT"],
-                account_id=(
-                    str(raw_tx["ZACCOUNT2"]) if raw_tx["ZACCOUNT2"] else "unknown"
-                ),
-                amount=(
-                    Decimal(str(raw_tx["ZAMOUNT1"]))
-                    if raw_tx["ZAMOUNT1"]
-                    else Decimal("0")
-                ),
-                date=datetime.datetime.now(),  # Simplified for test
-                description=raw_tx["ZDESCRIPTION"] or "No description",
-                transaction_type=TransactionType.WITHDRAW,  # Simplified
-                currency="USD",
-            )
+            # Use the proper factory method to create transaction with all required fields
+            transaction = TransactionModel.from_raw_data(raw_tx)
 
             # Enhance with category information
-            enhanced = await transaction_service._enhance_transaction_with_metadata(
-                transaction
-            )
+            enhanced = await transaction_service._enhance_transaction(transaction)
 
             if enhanced.category and enhanced.category != "Uncategorized":
                 categorized_count += 1
