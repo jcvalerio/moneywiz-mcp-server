@@ -41,7 +41,6 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.0",
     "ruff>=0.1.8",
-    "black>=23.0.0",
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
     "bandit>=1.7.5",
@@ -175,7 +174,7 @@ ignore = [
     "PLR0911", # too many return statements (date parser)
     "PLW2901", # redefined loop variable (env loader)
     "PTH110",  # os.path.exists (legacy paths)
-    "PTH118",  # os.path.join (legacy paths) 
+    "PTH118",  # os.path.join (legacy paths)
     "PTH120",  # os.path.dirname (legacy paths)
     "PTH123",  # open() vs Path.open() (minor modernization)
     "ARG001",  # unused function argument (interface compliance)
@@ -205,24 +204,24 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 
-# Black configuration (secondary formatter)
-[tool.black]
-line-length = 88
-target-version = ['py310']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+# Black configuration (DISABLED - using Ruff as primary formatter)
+# [tool.black]
+# line-length = 88
+# target-version = ['py310']
+# include = '\.pyi?$'
+# extend-exclude = '''
+# /(
+#   # directories
+#   \.eggs
+#   | \.git
+#   | \.hg
+#   | \.mypy_cache
+#   | \.tox
+#   | \.venv
+#   | build
+#   | dist
+# )/
+# '''
 
 # Type checking
 [tool.mypy]

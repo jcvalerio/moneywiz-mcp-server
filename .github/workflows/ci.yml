@@ -48,11 +48,6 @@ jobs:
           ruff format --check .
           echo "::endgroup::"
 
-      - name: Run Black check
-        run: |
-          echo "::group::Black Formatting"
-          black --check --diff .
-          echo "::endgroup::"
 
       - name: Run Mypy type checking
         run: |

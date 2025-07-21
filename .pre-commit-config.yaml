@@ -13,13 +13,13 @@ repos:
         name: ruff (formatter)
         types_or: [python, pyi, jupyter]
 
-  # Black - Code formatter (backup/secondary formatting)
-  - repo: https://github.com/psf/black
-    rev: 23.12.1
-    hooks:
-      - id: black
-        language_version: python3
-        types: [python]
+  # Black - DISABLED (using Ruff as primary formatter)
+  # - repo: https://github.com/psf/black
+  #   rev: 23.12.1
+  #   hooks:
+  #     - id: black
+  #       language_version: python3
+  #       types: [python]
 
   # Mypy - Static type checker
   - repo: https://github.com/pre-commit/mirrors-mypy
