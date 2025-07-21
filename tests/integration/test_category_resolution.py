@@ -190,12 +190,14 @@ class TestCategoryResolution:
             transaction = TransactionModel(
                 id=str(raw_tx["Z_PK"]),
                 entity_id=raw_tx["Z_ENT"],
-                account_id=str(raw_tx["ZACCOUNT2"])
-                if raw_tx["ZACCOUNT2"]
-                else "unknown",
-                amount=Decimal(str(raw_tx["ZAMOUNT1"]))
-                if raw_tx["ZAMOUNT1"]
-                else Decimal("0"),
+                account_id=(
+                    str(raw_tx["ZACCOUNT2"]) if raw_tx["ZACCOUNT2"] else "unknown"
+                ),
+                amount=(
+                    Decimal(str(raw_tx["ZAMOUNT1"]))
+                    if raw_tx["ZAMOUNT1"]
+                    else Decimal("0")
+                ),
                 date=datetime.datetime.now(),  # Simplified for test
                 description=raw_tx["ZDESCRIPTION"] or "No description",
                 transaction_type=TransactionType.WITHDRAW,  # Simplified

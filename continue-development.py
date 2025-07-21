@@ -266,7 +266,9 @@ def show_resources():
   2. Run: python test_mcp_connection.py
   3. Start development with transaction entity research
   4. Test changes with Claude Desktop integration
-""".format(db_path=os.getenv("MONEYWIZ_DB_PATH", "Not set"))
+""".format(
+            db_path=os.getenv("MONEYWIZ_DB_PATH", "Not set")
+        )
     )
 
 

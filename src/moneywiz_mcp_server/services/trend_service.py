@@ -232,9 +232,9 @@ class TrendService:
                     "month": month,
                     "total_expenses": total,
                     "transaction_count": len(transactions),
-                    "average_transaction": total / len(transactions)
-                    if transactions
-                    else 0,
+                    "average_transaction": (
+                        total / len(transactions) if transactions else 0
+                    ),
                 }
             )
 
@@ -275,9 +275,11 @@ class TrendService:
                     "month": month,
                     "total_expenses": total,
                     "transaction_count": len(category_transactions),
-                    "average_transaction": total / len(category_transactions)
-                    if category_transactions
-                    else 0,
+                    "average_transaction": (
+                        total / len(category_transactions)
+                        if category_transactions
+                        else 0
+                    ),
                 }
             )
 
@@ -431,9 +433,9 @@ class TrendService:
                 {
                     "month": future_date.strftime("%Y-%m"),
                     "projected_amount": projected_amount,
-                    "confidence": "high"
-                    if trend_data["strength"] == "strong"
-                    else "medium",
+                    "confidence": (
+                        "high" if trend_data["strength"] == "strong" else "medium"
+                    ),
                 }
             )
 

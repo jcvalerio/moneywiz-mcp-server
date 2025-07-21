@@ -112,17 +112,21 @@ class SavingsService:
                 "target_savings_rate": target_savings_rate,
                 "projected_savings_rate": projected_savings_rate,
                 "potential_monthly_savings": float(potential_savings),
-                "needed_expense_reduction": float(
-                    self._calculate_needed_expense_reduction(
-                        total_income, total_expenses, target_savings_rate
+                "needed_expense_reduction": (
+                    float(
+                        self._calculate_needed_expense_reduction(
+                            total_income, total_expenses, target_savings_rate
+                        )
                     )
-                )
-                if current_savings_rate < target_savings_rate
-                else 0,
+                    if current_savings_rate < target_savings_rate
+                    else 0
+                ),
             },
             "recommendations": sorted(
                 recommendations, key=lambda x: x.get("priority_score", 0), reverse=True
-            )[:10],  # Top 10 recommendations
+            )[
+                :10
+            ],  # Top 10 recommendations
             "insights": {
                 "fixed_vs_variable": fixed_variable["insights"],
                 "spending_patterns": spending_patterns["insights"],
@@ -196,9 +200,11 @@ class SavingsService:
         insights["concentration"] = {
             "top_3_percentage": top_3_percentage,
             "is_concentrated": top_3_percentage > 60,
-            "message": "Your spending is highly concentrated"
-            if top_3_percentage > 60
-            else "Your spending is well diversified",
+            "message": (
+                "Your spending is highly concentrated"
+                if top_3_percentage > 60
+                else "Your spending is well diversified"
+            ),
         }
 
         return {
