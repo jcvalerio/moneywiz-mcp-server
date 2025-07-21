@@ -8,6 +8,8 @@ from typing import Any
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.transaction import TransactionModel
 
+from .transaction_service import TransactionService
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,8 +38,6 @@ class TrendService:
         start_date = end_date - timedelta(days=months * 30)
 
         # Get transaction service
-        from .transaction_service import TransactionService
-
         transaction_service = TransactionService(self.db_manager)
 
         # Get transactions for the period
@@ -90,8 +90,6 @@ class TrendService:
         start_date = end_date - timedelta(days=months * 30)
 
         # Get expense summary to identify top categories
-        from .transaction_service import TransactionService
-
         transaction_service = TransactionService(self.db_manager)
 
         expense_summary = await transaction_service.get_expense_summary(
@@ -141,8 +139,6 @@ class TrendService:
         for i in range(months):
             month_end = end_date - timedelta(days=i * 30)
             month_start = month_end - timedelta(days=30)
-
-            from .transaction_service import TransactionService
 
             transaction_service = TransactionService(self.db_manager)
 

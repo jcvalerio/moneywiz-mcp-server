@@ -13,17 +13,17 @@ from moneywiz_mcp_server.services.trend_service import TrendService
 class TestTrendService:
     """Test suite for TrendService following TDD principles."""
 
-    @pytest.fixture
+    @pytest.fixture()
     def mock_db_manager(self):
         """Create mock database manager."""
         return AsyncMock()
 
-    @pytest.fixture
+    @pytest.fixture()
     def trend_service(self, mock_db_manager):
         """Create TrendService instance with mocked dependencies."""
         return TrendService(mock_db_manager)
 
-    @pytest.fixture
+    @pytest.fixture()
     def sample_transactions(self):
         """Create sample transaction data for testing."""
         base_date = datetime.now() - timedelta(days=90)
@@ -38,13 +38,25 @@ class TestTrendService:
                 transaction = TransactionModel(
                     id=f"grocery_{month}_{i}",
                     entity_id=47,  # Withdraw
-                    account_id="account_1",
+                    account_id=1,  # Fixed: account_id should be int
                     amount=Decimal(f"-{100 + month * 10}"),  # Increasing: 100, 110, 120
                     date=month_date + timedelta(days=i * 2),
                     description=f"Grocery Store {i}",
+                    notes=None,
+                    reconciled=False,
                     transaction_type=TransactionType.WITHDRAW,
                     category="Groceries",
+                    category_id=1,
+                    parent_category="Food & Dining",
+                    parent_category_id=10,
+                    category_path="Food & Dining ▶ Groceries",
+                    category_hierarchy=["Food & Dining", "Groceries"],
+                    payee="Grocery Store",
+                    payee_id=1,
                     currency="USD",
+                    original_currency=None,
+                    original_amount=None,
+                    exchange_rate=None,
                 )
                 transactions.append(transaction)
 
@@ -53,19 +65,31 @@ class TestTrendService:
                 transaction = TransactionModel(
                     id=f"entertainment_{month}_{i}",
                     entity_id=47,
-                    account_id="account_1",
+                    account_id=1,  # Fixed: account_id should be int
                     amount=Decimal(f"-{80 - month * 5}"),  # Decreasing: 80, 75, 70
                     date=month_date + timedelta(days=i * 3),
                     description=f"Entertainment {i}",
+                    notes=None,
+                    reconciled=False,
                     transaction_type=TransactionType.WITHDRAW,
                     category="Entertainment",
+                    category_id=2,
+                    parent_category="Lifestyle",
+                    parent_category_id=20,
+                    category_path="Lifestyle ▶ Entertainment",
+                    category_hierarchy=["Lifestyle", "Entertainment"],
+                    payee="Entertainment Venue",
+                    payee_id=2,
                     currency="USD",
+                    original_currency=None,
+                    original_amount=None,
+                    exchange_rate=None,
                 )
                 transactions.append(transaction)
 
         return transactions
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_analyze_spending_trends_basic(
         self, trend_service, sample_transactions
     ):
@@ -108,7 +132,7 @@ class TestTrendService:
         # Verify transaction service was called
         mock_transaction_service.get_transactions.assert_called_once()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_analyze_category_trends(self, trend_service):
         """Test category-specific trend analysis."""
         # Arrange
@@ -186,7 +210,7 @@ class TestTrendService:
             assert "growth_rate" in trend
             assert "insights" in trend
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_analyze_income_vs_expense_trends(self, trend_service):
         """Test income vs expense trend analysis."""
         # Arrange
