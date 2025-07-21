@@ -1,5 +1,8 @@
-"""MCP tools for MoneyWiz server."""
+"""MCP tools for MoneyWiz server.
 
-from .accounts import get_account_tool, list_accounts_tool
+Note: This module is now deprecated. Tools are implemented using FastMCP decorators
+in main.py instead of the legacy Tool factory pattern.
+"""
 
-__all__ = ["get_account_tool", "list_accounts_tool"]
+# Legacy tool imports removed - using FastMCP decorators instead
+__all__ = []

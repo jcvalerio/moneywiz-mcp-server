@@ -3,7 +3,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
 import logging
-from typing import Any
+from typing import Any, TypedDict
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.transaction import TransactionModel
@@ -11,6 +11,15 @@ from moneywiz_mcp_server.models.transaction import TransactionModel
 from .transaction_service import TransactionService
 
 logger = logging.getLogger(__name__)
+
+
+class MonthlyFinancialData(TypedDict):
+    """TypedDict for monthly financial data structure."""
+    month: str
+    income: float
+    expenses: float
+    net_savings: float
+    savings_rate: float
 
 
 class TrendService:
@@ -133,7 +142,7 @@ class TrendService:
         logger.info(f"Analyzing income vs expense trends for {months} months")
 
         end_date = datetime.now()
-        monthly_data = []
+        monthly_data: list[MonthlyFinancialData] = []
 
         # Get month-by-month data
         for i in range(months):
@@ -147,13 +156,13 @@ class TrendService:
             )
 
             monthly_data.append(
-                {
-                    "month": month_end.strftime("%Y-%m"),
-                    "income": float(income_expense.total_income),
-                    "expenses": float(income_expense.total_expenses),
-                    "net_savings": float(income_expense.net_savings),
-                    "savings_rate": float(income_expense.savings_rate),
-                }
+                MonthlyFinancialData(
+                    month=month_end.strftime("%Y-%m"),
+                    income=float(income_expense.total_income),
+                    expenses=float(income_expense.total_expenses),
+                    net_savings=float(income_expense.net_savings),
+                    savings_rate=float(income_expense.savings_rate),
+                )
             )
 
         # Reverse to get chronological order
@@ -498,7 +507,7 @@ class TrendService:
 
     def _generate_income_expense_insights(
         self,
-        monthly_data: list[dict[str, Any]],
+        monthly_data: list[MonthlyFinancialData],
         income_trend: dict[str, Any],
         expense_trend: dict[str, Any],
         savings_trend: dict[str, Any],

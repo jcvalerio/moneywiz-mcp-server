@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class ExpenseGroupData(TypedDict):
     """TypedDict for expense group aggregation data."""
+
     total_amount: Decimal
     transaction_count: int
     transactions: list["TransactionModel"]
@@ -650,7 +651,7 @@ class TransactionService:
                             0, category_name
                         )  # Add to beginning for correct order
 
-                    current_id = parent_id
+                    current_id = parent_id if isinstance(parent_id, int) else None
                 else:
                     break
 

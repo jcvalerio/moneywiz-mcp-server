@@ -9,6 +9,7 @@ from mcp.server import FastMCP
 
 from .config import Config
 from .database.connection import DatabaseManager
+from .services.transaction_service import TransactionService
 from .models.responses import (
     AccountDetailResponse,
     AccountListResponse,
@@ -27,18 +28,11 @@ from .services.savings_service import SavingsService
 from .services.trend_service import TrendService
 
 # Import tools at top level to avoid PLC0415 errors
-from .tools.accounts import get_account_tool, list_accounts_tool
-from .tools.transactions import (
-    analyze_expenses_by_category_tool,
-    analyze_income_vs_expenses_tool,
-    search_transactions_tool,
-)
+# Legacy tool imports removed - using FastMCP decorators instead
+from .utils.date_utils import parse_natural_language_date
 
 # Import additional utilities to avoid inline imports
-from .utils.date_utils import (
-    format_date_range_for_display,
-    parse_natural_language_date,
-)
+from .utils.date_utils import format_date_range_for_display
 from .utils.env_loader import load_env_file
 
 # Configure logging to stderr (MCP best practice)
@@ -92,9 +86,10 @@ async def list_accounts(
         db_manager = await get_db_manager()
 
         try:
-            # Create tool instance and get results
-            tool = list_accounts_tool(db_manager)
-            accounts_data = await tool.handler(
+            # Use account service for clean separation of concerns
+            from .services.account_service import AccountService
+            account_service = AccountService(db_manager)
+            accounts_data = await account_service.list_accounts(
                 include_hidden=include_hidden, account_type=account_type
             )
 
@@ -140,8 +135,10 @@ async def get_account(
         db_manager = await get_db_manager()
 
         try:
-            tool = get_account_tool(db_manager)
-            account_data = await tool.handler(
+            # Use account service for clean separation of concerns
+            from .services.account_service import AccountService
+            account_service = AccountService(db_manager)
+            account_data = await account_service.get_account(
                 account_id=account_id, include_transactions=include_transactions
             )
 
@@ -193,14 +190,29 @@ async def search_transactions(
             # Parse the time period for metadata
             date_range = parse_natural_language_date(time_period)
 
-            tool = search_transactions_tool(db_manager)
-            transactions_data = await tool.handler(
-                time_period=time_period,
-                account_ids=account_ids,
+            # Use transaction service directly
+            transaction_service = TransactionService(db_manager)
+            date_range = parse_natural_language_date(time_period)
+            transactions = await transaction_service.get_transactions(
+                start_date=date_range.start_date,
+                end_date=date_range.end_date,
+                account_ids=[int(aid) for aid in account_ids] if account_ids else None,
                 categories=categories,
-                transaction_type=transaction_type,
                 limit=limit,
             )
+            
+            # Format transactions data
+            transactions_data = [{
+                "id": transaction.id,
+                "date": transaction.date.isoformat(),
+                "description": transaction.description,
+                "amount": float(transaction.amount),
+                "category": transaction.category or "Uncategorized",
+                "payee": transaction.payee or "Unknown",
+                "account_id": transaction.account_id,
+                "transaction_type": transaction.transaction_type.value,
+                "currency": transaction.currency,
+            } for transaction in transactions]
 
             return TransactionListResponse(
                 transactions=transactions_data,
@@ -243,10 +255,30 @@ async def analyze_expenses_by_category(
         db_manager = await get_db_manager()
 
         try:
-            tool = analyze_expenses_by_category_tool(db_manager)
-            analysis_data = await tool.handler(
-                time_period=time_period, top_categories=top_categories
+            # Use transaction service directly
+            transaction_service = TransactionService(db_manager)
+            date_range = parse_natural_language_date(time_period)
+            analysis_data = await transaction_service.get_expense_summary(
+                start_date=date_range.start_date,
+                end_date=date_range.end_date,
+                group_by="category"
             )
+            
+            # Format for response
+            formatted_categories = [{
+                "category_name": category.category_name,
+                "total_amount": float(category.total_amount),
+                "transaction_count": category.transaction_count,
+                "percentage_of_total": category.percentage_of_total,
+                "average_amount": float(category.average_amount),
+            } for category in analysis_data["category_breakdown"][:top_categories]]
+            
+            analysis_data = {
+                "analysis_period": f"{date_range.start_date.strftime('%Y-%m-%d')} to {date_range.end_date.strftime('%Y-%m-%d')}",
+                "total_expenses": float(analysis_data["total_expenses"]),
+                "currency": analysis_data["currency"],
+                "top_categories": formatted_categories,
+            }
 
             return ExpenseAnalysisResponse(**analysis_data)
         finally:
@@ -277,8 +309,28 @@ async def analyze_income_vs_expenses(
         db_manager = await get_db_manager()
 
         try:
-            tool = analyze_income_vs_expenses_tool(db_manager)
-            analysis_data = await tool.handler(time_period=time_period)
+            # Use transaction service directly
+            transaction_service = TransactionService(db_manager)
+            date_range = parse_natural_language_date(time_period)
+            income_expense_analysis = await transaction_service.get_income_vs_expense(
+                start_date=date_range.start_date,
+                end_date=date_range.end_date
+            )
+            
+            # Format for response
+            analysis_data = {
+                "analysis_period": f"{date_range.start_date.strftime('%Y-%m-%d')} to {date_range.end_date.strftime('%Y-%m-%d')}",
+                "total_income": float(income_expense_analysis.total_income),
+                "total_expenses": float(income_expense_analysis.total_expenses),
+                "net_savings": float(income_expense_analysis.net_savings),
+                "savings_rate": income_expense_analysis.savings_rate,
+                "currency": income_expense_analysis.currency,
+                "expense_breakdown": [{
+                    "category_name": cat.category_name,
+                    "total_amount": float(cat.total_amount),
+                    "percentage_of_total": cat.percentage_of_total,
+                } for cat in income_expense_analysis.expense_breakdown[:10]],
+            }
 
             return IncomeVsExpensesResponse(**analysis_data)
         finally:
