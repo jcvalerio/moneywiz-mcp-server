@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class MonthlyFinancialData(TypedDict):
     """TypedDict for monthly financial data structure."""
+
     month: str
     income: float
     expenses: float

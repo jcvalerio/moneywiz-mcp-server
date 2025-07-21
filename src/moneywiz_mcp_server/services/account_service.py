@@ -93,5 +93,5 @@ class AccountService:
                     # TODO: Add transaction history
                     account["recent_transactions"] = []
                 return account
-        
+
         raise ValueError(f"Account {account_id} not found")

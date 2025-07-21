@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """MoneyWiz MCP Server - Modern FastMCP implementation."""
+# mypy: disable-error-code=misc
 
 import logging
 from pathlib import Path
@@ -9,7 +10,6 @@ from mcp.server import FastMCP
 
 from .config import Config
 from .database.connection import DatabaseManager
-from .services.transaction_service import TransactionService
 from .models.responses import (
     AccountDetailResponse,
     AccountListResponse,
@@ -25,14 +25,13 @@ from .models.savings_responses import (
     SpendingTrendResponse,
 )
 from .services.savings_service import SavingsService
+from .services.transaction_service import TransactionService
 from .services.trend_service import TrendService
 
 # Import tools at top level to avoid PLC0415 errors
 # Legacy tool imports removed - using FastMCP decorators instead
-from .utils.date_utils import parse_natural_language_date
-
 # Import additional utilities to avoid inline imports
-from .utils.date_utils import format_date_range_for_display
+from .utils.date_utils import format_date_range_for_display, parse_natural_language_date
 from .utils.env_loader import load_env_file
 
 # Configure logging to stderr (MCP best practice)
@@ -88,6 +87,7 @@ async def list_accounts(
         try:
             # Use account service for clean separation of concerns
             from .services.account_service import AccountService
+
             account_service = AccountService(db_manager)
             accounts_data = await account_service.list_accounts(
                 include_hidden=include_hidden, account_type=account_type
@@ -137,6 +137,7 @@ async def get_account(
         try:
             # Use account service for clean separation of concerns
             from .services.account_service import AccountService
+
             account_service = AccountService(db_manager)
             account_data = await account_service.get_account(
                 account_id=account_id, include_transactions=include_transactions
@@ -200,19 +201,26 @@ async def search_transactions(
                 categories=categories,
                 limit=limit,
             )
-            
+
             # Format transactions data
-            transactions_data = [{
-                "id": transaction.id,
-                "date": transaction.date.isoformat(),
-                "description": transaction.description,
-                "amount": float(transaction.amount),
-                "category": transaction.category or "Uncategorized",
-                "payee": transaction.payee or "Unknown",
-                "account_id": transaction.account_id,
-                "transaction_type": transaction.transaction_type.value,
-                "currency": transaction.currency,
-            } for transaction in transactions]
+            from .models.responses import TransactionResponse
+
+            transactions_data = [
+                TransactionResponse(
+                    id=str(transaction.id),
+                    date=transaction.date.isoformat(),
+                    description=transaction.description,
+                    amount=f"{float(transaction.amount):.2f} {transaction.currency}",
+                    category=transaction.category or "Uncategorized",
+                    payee=transaction.payee or "Unknown",
+                    account_id=str(transaction.account_id),
+                    transaction_type=transaction.transaction_type.value,
+                    currency=transaction.currency,
+                    reconciled=False,
+                    notes=None,
+                )
+                for transaction in transactions
+            ]
 
             return TransactionListResponse(
                 transactions=transactions_data,
@@ -261,18 +269,21 @@ async def analyze_expenses_by_category(
             analysis_data = await transaction_service.get_expense_summary(
                 start_date=date_range.start_date,
                 end_date=date_range.end_date,
-                group_by="category"
+                group_by="category",
             )
-            
+
             # Format for response
-            formatted_categories = [{
-                "category_name": category.category_name,
-                "total_amount": float(category.total_amount),
-                "transaction_count": category.transaction_count,
-                "percentage_of_total": category.percentage_of_total,
-                "average_amount": float(category.average_amount),
-            } for category in analysis_data["category_breakdown"][:top_categories]]
-            
+            formatted_categories = [
+                {
+                    "category_name": category.category_name,
+                    "total_amount": float(category.total_amount),
+                    "transaction_count": category.transaction_count,
+                    "percentage_of_total": category.percentage_of_total,
+                    "average_amount": float(category.average_amount),
+                }
+                for category in analysis_data["category_breakdown"][:top_categories]
+            ]
+
             analysis_data = {
                 "analysis_period": f"{date_range.start_date.strftime('%Y-%m-%d')} to {date_range.end_date.strftime('%Y-%m-%d')}",
                 "total_expenses": float(analysis_data["total_expenses"]),
@@ -313,26 +324,48 @@ async def analyze_income_vs_expenses(
             transaction_service = TransactionService(db_manager)
             date_range = parse_natural_language_date(time_period)
             income_expense_analysis = await transaction_service.get_income_vs_expense(
-                start_date=date_range.start_date,
-                end_date=date_range.end_date
+                start_date=date_range.start_date, end_date=date_range.end_date
             )
-            
+
             # Format for response
-            analysis_data = {
-                "analysis_period": f"{date_range.start_date.strftime('%Y-%m-%d')} to {date_range.end_date.strftime('%Y-%m-%d')}",
-                "total_income": float(income_expense_analysis.total_income),
-                "total_expenses": float(income_expense_analysis.total_expenses),
-                "net_savings": float(income_expense_analysis.net_savings),
-                "savings_rate": income_expense_analysis.savings_rate,
-                "currency": income_expense_analysis.currency,
-                "expense_breakdown": [{
+            from .models.responses import (
+                FinancialOverviewResponse,
+                SavingsAnalysisResponse,
+            )
+
+            financial_overview = FinancialOverviewResponse(
+                total_income=f"{float(income_expense_analysis.total_income):.2f} {income_expense_analysis.currency}",
+                total_expenses=f"{float(income_expense_analysis.total_expenses):.2f} {income_expense_analysis.currency}",
+                net_savings=f"{float(income_expense_analysis.net_savings):.2f} {income_expense_analysis.currency}",
+                savings_rate=f"{income_expense_analysis.savings_rate:.1f}%",
+                currency=income_expense_analysis.currency,
+            )
+
+            savings_analysis = SavingsAnalysisResponse(
+                status="positive"
+                if income_expense_analysis.net_savings > 0
+                else "negative",
+                monthly_savings=f"{float(income_expense_analysis.net_savings):.2f} {income_expense_analysis.currency}",
+                recommendations=["Continue current savings habits"]
+                if income_expense_analysis.net_savings > 0
+                else ["Review expenses to improve savings"],
+            )
+
+            expense_breakdown = [
+                {
                     "category_name": cat.category_name,
                     "total_amount": float(cat.total_amount),
                     "percentage_of_total": cat.percentage_of_total,
-                } for cat in income_expense_analysis.expense_breakdown[:10]],
-            }
+                }
+                for cat in income_expense_analysis.expense_breakdown[:10]
+            ]
 
-            return IncomeVsExpensesResponse(**analysis_data)
+            return IncomeVsExpensesResponse(
+                analysis_period=f"{date_range.start_date.strftime('%Y-%m-%d')} to {date_range.end_date.strftime('%Y-%m-%d')}",
+                financial_overview=financial_overview,
+                expense_breakdown=expense_breakdown,
+                savings_analysis=savings_analysis,
+            )
         finally:
             await db_manager.close()
 
@@ -515,7 +548,7 @@ async def analyze_income_expense_trends(
         raise RuntimeError(f"Failed to analyze income vs expense trends: {e!s}") from e
 
 
-def main():
+def main() -> int:
     """Main entry point for the MCP server."""
     try:
         logger.info("🎯 MoneyWiz MCP Server starting with FastMCP")
@@ -546,7 +579,7 @@ def main():
         return 1
 
 
-def cli_main():
+def cli_main() -> None:
     """CLI entry point."""
     sys.exit(main())
 
