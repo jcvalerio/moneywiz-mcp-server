@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from .transaction import DateRange
 
@@ -63,7 +64,7 @@ class SpendingPatterns:
     trend_direction: str  # "increasing", "decreasing", "stable"
     volatility_score: float  # 0-1 scale (0=stable, 1=highly volatile)
     peak_months: list[str]  # Months with highest spending
-    seasonal_patterns: dict  # Month -> spending multiplier
+    seasonal_patterns: dict[str, float]  # Month -> spending multiplier
 
 
 @dataclass
@@ -90,7 +91,7 @@ class IncomeExpenseAnalysis:
     expense_breakdown: list[CategoryExpense]
     analysis_period: DateRange
     currency: str
-    monthly_averages: dict  # month -> {"income": amount, "expenses": amount}
+    monthly_averages: dict[str, Any]  # month -> {"income": amount, "expenses": amount}
 
 
 @dataclass
@@ -100,7 +101,9 @@ class TrendAnalysis:
     income_trend: str  # "increasing", "decreasing", "stable"
     expense_trend: str  # "increasing", "decreasing", "stable"
     savings_trend: str  # "improving", "declining", "stable"
-    monthly_data: list[dict]  # [{"month": "2024-01", "income": 5000, "expenses": 3000}]
-    growth_rates: dict  # {"income": 0.05, "expenses": 0.03}
+    monthly_data: list[
+        dict[str, Any]
+    ]  # [{"month": "2024-01", "income": 5000, "expenses": 3000}]
+    growth_rates: dict[str, float]  # {"income": 0.05, "expenses": 0.03}
     analysis_period: DateRange
-    predictions: dict  # Next 3 months predictions
+    predictions: dict[str, Any]  # Next 3 months predictions

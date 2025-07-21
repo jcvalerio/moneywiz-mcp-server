@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Any
 
 
 class TransactionType(Enum):
@@ -89,7 +90,7 @@ class TransactionModel:
     tags: list[str] = field(default_factory=list)  # Tag names from Z_36TAGS
 
     @classmethod
-    def from_raw_data(cls, row: dict) -> "TransactionModel":
+    def from_raw_data(cls, row: dict[str, Any]) -> "TransactionModel":
         """
         Create TransactionModel from raw Core Data row.
 
