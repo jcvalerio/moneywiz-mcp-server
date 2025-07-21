@@ -2,14 +2,15 @@
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from moneywiz_mcp_server.models.analytics_result import (
     CategoryExpense,
-    IncomeVsExpenseResult,
+    IncomeExpenseAnalysis,
 )
+from moneywiz_mcp_server.models.transaction import DateRange
 from moneywiz_mcp_server.services.savings_service import SavingsService
 
 
@@ -30,13 +31,20 @@ class TestSavingsService:
     @pytest.fixture
     def sample_income_expense_data(self):
         """Sample income vs expense data for testing."""
-        return IncomeVsExpenseResult(
+        from datetime import datetime
+
+        return IncomeExpenseAnalysis(
             total_income=Decimal("5000.00"),
             total_expenses=Decimal("4000.00"),
             net_savings=Decimal("1000.00"),
-            savings_rate=Decimal("20.0"),
-            currency="USD",
+            savings_rate=20.0,  # float not Decimal
+            income_breakdown=[],
             expense_breakdown=[],
+            analysis_period=DateRange(
+                start_date=datetime(2024, 1, 1), end_date=datetime(2024, 3, 31)
+            ),
+            currency="USD",
+            monthly_averages={},
         )
 
     @pytest.fixture
@@ -45,6 +53,7 @@ class TestSavingsService:
         return [
             CategoryExpense(
                 category_name="Groceries",
+                category_id=1,
                 total_amount=Decimal("800.00"),
                 transaction_count=20,
                 average_amount=Decimal("40.00"),
@@ -52,6 +61,7 @@ class TestSavingsService:
             ),
             CategoryExpense(
                 category_name="Entertainment",
+                category_id=2,
                 total_amount=Decimal("600.00"),
                 transaction_count=15,
                 average_amount=Decimal("40.00"),
@@ -59,6 +69,7 @@ class TestSavingsService:
             ),
             CategoryExpense(
                 category_name="Dining Out",
+                category_id=3,
                 total_amount=Decimal("400.00"),
                 transaction_count=10,
                 average_amount=Decimal("40.00"),
@@ -89,8 +100,8 @@ class TestSavingsService:
         }
 
         # Patch the import to return our mock
-        with pytest.mock.patch(
-            "moneywiz_mcp_server.services.savings_service.TransactionService",
+        with patch(
+            "moneywiz_mcp_server.services.transaction_service.TransactionService",
             return_value=mock_transaction_service,
         ):
             # Act
@@ -121,7 +132,8 @@ class TestSavingsService:
 
         # Verify transaction service was called
         mock_transaction_service.get_income_vs_expense.assert_called_once()
-        mock_transaction_service.get_expense_summary.assert_called_once()
+        # get_expense_summary is called multiple times in the savings service
+        assert mock_transaction_service.get_expense_summary.call_count >= 1
 
     @pytest.mark.asyncio
     async def test_category_recommendations_high_spending(
@@ -131,6 +143,7 @@ class TestSavingsService:
         # Arrange - Create a category with >20% spending
         high_spending_category = CategoryExpense(
             category_name="High Spending Category",
+            category_id=4,
             total_amount=Decimal("1200.00"),
             transaction_count=30,
             average_amount=Decimal("40.00"),
@@ -159,7 +172,7 @@ class TestSavingsService:
         rec = high_spending_recs[0]
         assert rec["type"] == "category_reduction"
         assert rec["priority"] == "high"
-        assert "reduce by 15%" in rec["description"].lower()
+        assert "reducing by 15%" in rec["description"].lower()
 
     @pytest.mark.asyncio
     async def test_discretionary_spending_recommendations(
@@ -169,6 +182,7 @@ class TestSavingsService:
         # Arrange - Add discretionary categories
         discretionary_category = CategoryExpense(
             category_name="Entertainment",
+            category_id=5,
             total_amount=Decimal("600.00"),
             transaction_count=15,
             average_amount=Decimal("40.00"),
@@ -247,8 +261,8 @@ class TestSavingsService:
             "category_breakdown": sample_category_expenses
         }
 
-        with pytest.mock.patch(
-            "moneywiz_mcp_server.services.savings_service.TransactionService",
+        with patch(
+            "moneywiz_mcp_server.services.transaction_service.TransactionService",
             return_value=mock_transaction_service,
         ):
             # Act

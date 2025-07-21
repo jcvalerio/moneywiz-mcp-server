@@ -243,7 +243,6 @@ async def analyze_expenses_by_category(
         db_manager = await get_db_manager()
 
         try:
-
             tool = analyze_expenses_by_category_tool(db_manager)
             analysis_data = await tool.handler(
                 time_period=time_period, top_categories=top_categories
@@ -278,7 +277,6 @@ async def analyze_income_vs_expenses(
         db_manager = await get_db_manager()
 
         try:
-
             tool = analyze_income_vs_expenses_tool(db_manager)
             analysis_data = await tool.handler(time_period=time_period)
 
