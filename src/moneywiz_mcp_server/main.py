@@ -55,11 +55,15 @@ load_env_file()
 # Create FastMCP server instance
 mcp = FastMCP("moneywiz-mcp-server")
 
+# Module-level config storage for tools
+_config: Config | None = None
+
 
 async def get_db_manager() -> DatabaseManager:
     """Helper function to get database manager for tools."""
-    config = mcp._config
-    db_manager = DatabaseManager(config.database_path, read_only=config.read_only)
+    if _config is None:
+        raise RuntimeError("Config not initialized")
+    db_manager = DatabaseManager(_config.database_path, read_only=_config.read_only)
     await db_manager.initialize()
     return db_manager
 
@@ -565,7 +569,8 @@ def main() -> int:
             return 1
 
         # Store config for tools to use
-        mcp._config = config
+        global _config
+        _config = config
 
         # FastMCP handles its own event loop - just call run() directly
         mcp.run()

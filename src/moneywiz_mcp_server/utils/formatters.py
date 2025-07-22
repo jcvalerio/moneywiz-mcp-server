@@ -66,12 +66,12 @@ def parse_date(date_input: str | date | datetime) -> date:
         date(2024, 1, 15)
     """
     try:
-        # Handle common date formats
-        if isinstance(date_input, date):
-            return date_input
-
+        # Handle common date formats - check datetime first since it's a subclass of date
         if isinstance(date_input, datetime):
             return date_input.date()
+
+        if isinstance(date_input, date):
+            return date_input
 
         # Parse string using dateutil parser
         parsed_dt = parser.parse(date_input)
