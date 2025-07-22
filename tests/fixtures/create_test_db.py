@@ -66,13 +66,10 @@ def create_test_database(db_path: str) -> None:
             ZAMOUNT1 REAL,
             ZDATE1 REAL,
             ZDESC2 TEXT,
-            ZDESCRIPTION TEXT,
             ZNOTES1 TEXT,
             ZRECONCILED INTEGER DEFAULT 0,
             ZACCOUNT2 INTEGER,
-            ZPAYEE2 INTEGER,
-            ZPAYEE INTEGER,
-            ZDATEADDED REAL
+            ZPAYEE2 INTEGER
         )
         """)
 
@@ -368,13 +365,10 @@ def create_test_database(db_path: str) -> None:
                         3000.00,
                         core_data_timestamp,
                         "Salary Deposit",
-                        "Salary Deposit",
                         "Bi-weekly salary",
                         1,
                         1,
                         204,
-                        204,
-                        core_data_timestamp,
                     )
                 )
 
@@ -395,13 +389,10 @@ def create_test_database(db_path: str) -> None:
                         -85.50,
                         core_data_timestamp,
                         "Grocery Shopping",
-                        "Grocery Shopping",
                         "Weekly groceries",
                         0,
                         1,
                         201,
-                        201,
-                        core_data_timestamp,
                     )
                 )
 
@@ -422,13 +413,10 @@ def create_test_database(db_path: str) -> None:
                         -45.20,
                         core_data_timestamp,
                         "Gas Fill-up",
-                        "Gas Fill-up",
                         None,
                         0,
                         1,
                         202,
-                        202,
-                        core_data_timestamp,
                     )
                 )
 
@@ -438,8 +426,8 @@ def create_test_database(db_path: str) -> None:
             INSERT INTO ZSYNCOBJECT (
                 Z_PK, Z_ENT, Z_OPT, ZOPENINGBALANCE, ZNAME, ZNAME2, ZCURRENCYNAME,
                 ZARCHIVED, ZINSTITUTIONNAME, ZLASTFOURDIGITS, ZOBJECTCREATIONDATE,
-                ZAMOUNT1, ZDATE1, ZDESC2, ZDESCRIPTION, ZNOTES1, ZRECONCILED, ZACCOUNT2, ZPAYEE2, ZPAYEE, ZDATEADDED
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ZAMOUNT1, ZDATE1, ZDESC2, ZNOTES1, ZRECONCILED, ZACCOUNT2, ZPAYEE2
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 transaction,
             )

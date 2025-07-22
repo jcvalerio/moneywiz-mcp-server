@@ -125,7 +125,7 @@ class TestCategoryResolution:
         join_query = """
         SELECT
             t.Z_PK as transaction_id,
-            t.ZDESCRIPTION as description,
+            t.ZDESC2 as description,
             ca.ZCATEGORY as category_id,
             c.ZNAME as category_name,
             c.ZNAME2 as category_name2
@@ -133,7 +133,7 @@ class TestCategoryResolution:
         LEFT JOIN ZCATEGORYASSIGMENT ca ON ca.ZTRANSACTION = t.Z_PK
         LEFT JOIN ZSYNCOBJECT c ON c.Z_PK = ca.ZCATEGORY AND c.Z_ENT = 19
         WHERE t.Z_ENT IN (37, 45, 46, 47)
-        AND t.ZDESCRIPTION IS NOT NULL
+        AND t.ZDESC2 IS NOT NULL
         LIMIT 20
         """
 
@@ -183,10 +183,10 @@ class TestCategoryResolution:
 
         # Get some real transactions
         raw_query = """
-        SELECT Z_PK, Z_ENT, ZACCOUNT2, ZAMOUNT1, ZDATEADDED, ZDESCRIPTION, ZPAYEE
+        SELECT Z_PK, Z_ENT, ZACCOUNT2, ZAMOUNT1, ZDATE1, ZDESC2, ZPAYEE2
         FROM ZSYNCOBJECT
         WHERE Z_ENT IN (37, 45, 46, 47)
-        AND ZDESCRIPTION IS NOT NULL
+        AND ZDESC2 IS NOT NULL
         LIMIT 10
         """
 
