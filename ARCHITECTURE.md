@@ -97,11 +97,11 @@ MoneyWiz uses Core Data with the following key entity types:
 #### Account Balance Calculation
 ```sql
 -- Get opening balance
-SELECT ZOPENINGBALANCE FROM ZSYNCOBJECT 
+SELECT ZOPENINGBALANCE FROM ZSYNCOBJECT
 WHERE Z_PK = ? AND Z_ENT BETWEEN 10 AND 16;
 
 -- Sum transaction amounts
-SELECT SUM(ZAMOUNT1) FROM ZSYNCOBJECT 
+SELECT SUM(ZAMOUNT1) FROM ZSYNCOBJECT
 WHERE Z_ENT IN (37,45,46,47) AND ZACCOUNT2 = ?;
 
 -- Formula: balance = opening_balance + sum(transaction_amounts)
@@ -110,11 +110,11 @@ WHERE Z_ENT IN (37,45,46,47) AND ZACCOUNT2 = ?;
 #### Category Resolution
 ```sql
 -- Get category assignment
-SELECT ca.ZCATEGORY FROM ZCATEGORYASSIGMENT ca 
+SELECT ca.ZCATEGORY FROM ZCATEGORYASSIGMENT ca
 WHERE ca.ZTRANSACTION = ?;
 
 -- Get category name
-SELECT ZNAME2 FROM ZSYNCOBJECT 
+SELECT ZNAME2 FROM ZSYNCOBJECT
 WHERE Z_ENT = 19 AND Z_PK = ?;
 ```
 

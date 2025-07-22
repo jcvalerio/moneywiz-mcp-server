@@ -2,105 +2,112 @@
 """
 MoneyWiz MCP Server Environment Setup Script
 
-This script helps users configure their .env file with the correct MoneyWiz database path.
+This script helps users configure their .env file with the correct MoneyWiz
+database path.
 """
 
 import os
-import sys
 from pathlib import Path
+import sys
 
 
-def find_moneywiz_database():
+def find_moneywiz_database() -> list[Path]:
     """Find MoneyWiz database on macOS."""
     # Verify we're on macOS
-    if os.name != 'posix' or not hasattr(os, 'uname') or os.uname().sysname != 'Darwin':
+    if os.name != "posix" or not hasattr(os, "uname") or os.uname().sysname != "Darwin":
         print("❌ MoneyWiz MCP Server only supports macOS.")
         print("   MoneyWiz is only available on macOS, iOS, and iPadOS.")
         sys.exit(1)
-    
+
     home = Path.home()
     possible_paths = [
         # MoneyWiz 3 locations (including Setapp version)
         home / "Library/Containers/com.moneywiz.mac/Data/Documents",
-        home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents", 
+        home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
         home / "Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents",
         home / "Library/Application Support/MoneyWiz",
         # MoneyWiz 2 locations
         home / "Library/Application Support/SilverWiz/MoneyWiz 2",
     ]
-    
+
     # Search for database files
     found_databases = []
     for base_path in possible_paths:
         if not base_path.exists():
             continue
-        
+
         # Look for SQLite database files
         for pattern in ["*.sqlite", "*.sqlite3", "*.db"]:
-            for db_file in base_path.glob(pattern):
-                if db_file.is_file() and db_file.stat().st_size > 0:
-                    found_databases.append(db_file)
-    
+            found_databases.extend(
+                [
+                    db_file
+                    for db_file in base_path.glob(pattern)
+                    if db_file.is_file() and db_file.stat().st_size > 0
+                ]
+            )
+
     return found_databases
 
 
-def create_env_file():
+def create_env_file() -> None:
     """Create .env file with user configuration."""
     # Platform check
-    if os.name != 'posix' or not hasattr(os, 'uname') or os.uname().sysname != 'Darwin':
+    if os.name != "posix" or not hasattr(os, "uname") or os.uname().sysname != "Darwin":
         print("❌ MoneyWiz MCP Server only supports macOS.")
         print("   MoneyWiz is only available on macOS, iOS, and iPadOS.")
         sys.exit(1)
-    
+
     project_root = Path(__file__).parent
     env_file = project_root / ".env"
-    env_example = project_root / ".env.example"
-    
+    project_root / ".env.example"
+
     print("🔍 MoneyWiz MCP Server - Environment Setup")
     print("=" * 50)
-    
+
     # Check if .env already exists
     if env_file.exists():
         print(f"⚠️  .env file already exists: {env_file}")
         overwrite = input("Do you want to overwrite it? (y/N): ").lower().strip()
-        if overwrite != 'y':
+        if overwrite != "y":
             print("Setup cancelled.")
             return
-    
+
     # Find MoneyWiz databases
     print("\n🔍 Searching for MoneyWiz databases...")
     found_databases = find_moneywiz_database()
-    
+
     if not found_databases:
         print("❌ No MoneyWiz databases found automatically.")
         print("\nPlease locate your MoneyWiz database manually.")
         print("Common locations on macOS:")
         print("  - ~/Library/Containers/com.moneywiz.*/Data/Documents/")
         print("  - ~/Library/Application Support/MoneyWiz/")
-        
+
         db_path = input("\nEnter the full path to your MoneyWiz database: ").strip()
         if not db_path:
             print("Setup cancelled.")
             return
-        
+
         if not Path(db_path).exists():
             print(f"❌ File not found: {db_path}")
             return
-        
+
         selected_db = Path(db_path)
-    
+
     else:
         print(f"\n✅ Found {len(found_databases)} MoneyWiz database(s):")
         for i, db in enumerate(found_databases, 1):
             size_mb = db.stat().st_size / (1024 * 1024)
             print(f"  {i}. {db} ({size_mb:.1f} MB)")
-        
+
         if len(found_databases) == 1:
             selected_db = found_databases[0]
             print(f"\n✅ Using: {selected_db}")
         else:
             try:
-                choice = int(input(f"\nSelect database (1-{len(found_databases)}): ")) - 1
+                choice = (
+                    int(input(f"\nSelect database (1-{len(found_databases)}): ")) - 1
+                )
                 if 0 <= choice < len(found_databases):
                     selected_db = found_databases[choice]
                 else:
@@ -109,7 +116,7 @@ def create_env_file():
             except ValueError:
                 print("Invalid selection.")
                 return
-    
+
     # Create .env file content
     env_content = f"""# MoneyWiz MCP Server Configuration
 # Generated by setup_env.py
@@ -129,19 +136,19 @@ CACHE_TTL=300
 # Optional: Maximum results per query
 MAX_RESULTS=1000
 """
-    
+
     # Write .env file
     try:
-        with open(env_file, 'w') as f:
+        with Path(env_file).open("w") as f:
             f.write(env_content)
-        
+
         print(f"\n✅ Created .env file: {env_file}")
         print(f"✅ Database path: {selected_db}")
         print("\n🚀 Next steps:")
         print("1. Test the server: python launcher.py")
         print("2. Configure Claude Desktop with the launcher.py path")
         print("3. Restart Claude Desktop")
-        
+
     except Exception as e:
         print(f"❌ Failed to create .env file: {e}")
 

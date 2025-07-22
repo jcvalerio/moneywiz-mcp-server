@@ -1,24 +1,23 @@
 """Formatting utilities for MoneyWiz MCP Server."""
 
+from datetime import date, datetime
 import logging
-from datetime import datetime, date
-from typing import Union
+
 from dateutil import parser
-import locale
 
 logger = logging.getLogger(__name__)
 
 
 def format_currency(amount: float, currency: str = "USD") -> str:
     """Format currency amount for display.
-    
+
     Args:
         amount: Numeric amount to format
         currency: Currency code (e.g., "USD", "EUR")
-        
+
     Returns:
         Formatted currency string
-        
+
     Example:
         >>> format_currency(1234.56, "USD")
         "$1,234.56"
@@ -27,39 +26,39 @@ def format_currency(amount: float, currency: str = "USD") -> str:
         # Map common currency codes to symbols
         currency_symbols = {
             "USD": "$",
-            "EUR": "€", 
+            "EUR": "€",
             "GBP": "£",
             "JPY": "¥",
             "CAD": "C$",
-            "AUD": "A$"
+            "AUD": "A$",
         }
-        
+
         symbol = currency_symbols.get(currency.upper(), currency)
-        
+
         # Format with thousands separator and 2 decimal places
         if currency.upper() == "JPY":
             # Japanese Yen typically has no decimal places
             return f"{symbol}{amount:,.0f}"
         else:
             return f"{symbol}{amount:,.2f}"
-            
+
     except Exception as e:
         logger.warning(f"Error formatting currency {amount} {currency}: {e}")
         return f"{currency} {amount:.2f}"
 
 
-def parse_date(date_string: str) -> date:
-    """Parse date string into date object.
-    
+def parse_date(date_input: str | date | datetime) -> date:
+    """Parse date input into date object.
+
     Args:
-        date_string: Date string in various formats
-        
+        date_input: Date input in various formats (string, date, or datetime)
+
     Returns:
         Parsed date object
-        
+
     Raises:
-        ValueError: If date string cannot be parsed
-        
+        ValueError: If date input cannot be parsed
+
     Example:
         >>> parse_date("2024-01-15")
         date(2024, 1, 15)
@@ -67,32 +66,32 @@ def parse_date(date_string: str) -> date:
         date(2024, 1, 15)
     """
     try:
-        # Handle common date formats
-        if isinstance(date_string, date):
-            return date_string
-        
-        if isinstance(date_string, datetime):
-            return date_string.date()
-            
+        # Handle common date formats - check datetime first since it's a subclass of date
+        if isinstance(date_input, datetime):
+            return date_input.date()
+
+        if isinstance(date_input, date):
+            return date_input
+
         # Parse string using dateutil parser
-        parsed_dt = parser.parse(date_string)
+        parsed_dt = parser.parse(date_input)
         return parsed_dt.date()
-        
+
     except (ValueError, TypeError) as e:
-        logger.error(f"Failed to parse date '{date_string}': {e}")
-        raise ValueError(f"Invalid date format: {date_string}")
+        logger.error(f"Failed to parse date '{date_input}': {e}")
+        raise ValueError(f"Invalid date format: {date_input}") from e
 
 
-def format_date(dt: Union[date, datetime, str], format_str: str = "%Y-%m-%d") -> str:
+def format_date(dt: date | datetime | str, format_str: str = "%Y-%m-%d") -> str:
     """Format date for consistent display.
-    
+
     Args:
         dt: Date to format (date, datetime, or string)
         format_str: Output format string
-        
+
     Returns:
         Formatted date string
-        
+
     Example:
         >>> format_date(date(2024, 1, 15))
         "2024-01-15"
@@ -102,9 +101,9 @@ def format_date(dt: Union[date, datetime, str], format_str: str = "%Y-%m-%d") ->
             dt = parse_date(dt)
         elif isinstance(dt, datetime):
             dt = dt.date()
-            
+
         return dt.strftime(format_str)
-        
+
     except Exception as e:
         logger.warning(f"Error formatting date {dt}: {e}")
         return str(dt)
@@ -112,14 +111,14 @@ def format_date(dt: Union[date, datetime, str], format_str: str = "%Y-%m-%d") ->
 
 def format_percentage(value: float, decimal_places: int = 2) -> str:
     """Format percentage for display.
-    
+
     Args:
         value: Percentage value (e.g., 0.15 for 15%)
         decimal_places: Number of decimal places
-        
+
     Returns:
         Formatted percentage string
-        
+
     Example:
         >>> format_percentage(0.1523)
         "15.23%"

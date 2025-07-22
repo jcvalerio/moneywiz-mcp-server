@@ -1,0 +1,114 @@
+name: Security & Dependency Checks
+
+on:
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # Security vulnerability scanning
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install safety pip-audit
+
+      - name: Run Safety check
+        run: |
+          echo "::group::Safety Check"
+          safety check --output json > safety-report.json
+          safety check
+          echo "::endgroup::"
+
+      - name: Run pip-audit
+        run: |
+          echo "::group::Pip Audit"
+          pip-audit --format=json --output=pip-audit-report.json
+          pip-audit
+          echo "::endgroup::"
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            safety-report.json
+            pip-audit-report.json
+
+  # Dependency analysis
+  dependency-check:
+    name: Dependency Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-tools
+        run: pip install pip-tools
+
+      - name: Check for dependency updates
+        run: |
+          echo "::group::Dependency Updates"
+          pip-compile --upgrade --resolver=backtracking pyproject.toml --extra=dev --output-file=requirements-dev.txt
+          pip-compile --upgrade --resolver=backtracking pyproject.toml --output-file=requirements.txt
+          echo "::endgroup::"
+
+      - name: Check dependency tree
+        run: |
+          pip install pipdeptree
+          echo "::group::Dependency Tree"
+          pipdeptree --warn silence
+          echo "::endgroup::"
+
+  # CodeQL analysis
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'python' ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
