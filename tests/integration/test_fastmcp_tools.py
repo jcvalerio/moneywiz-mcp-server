@@ -34,11 +34,15 @@ class TestFastMCPToolsIntegration:
     @pytest.fixture
     def _setup_mcp_config(self, mock_config):
         """Setup MCP server with test configuration."""
-        mcp._config = mock_config
+        import moneywiz_mcp_server.main as main_module
+
+        # Store original config
+        original_config = getattr(main_module, "_config", None)
+        # Set test config
+        main_module._config = mock_config
         yield
-        # Cleanup
-        if hasattr(mcp, "_config"):
-            delattr(mcp, "_config")
+        # Restore original config
+        main_module._config = original_config
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_setup_mcp_config")
@@ -80,7 +84,9 @@ class TestFastMCPToolsIntegration:
                 },
             }
 
-            with patch("moneywiz_mcp_server.main.SavingsService") as mock_service_class:
+            with patch(
+                "moneywiz_mcp_server.services.savings_service.SavingsService"
+            ) as mock_service_class:
                 mock_service = AsyncMock()
                 mock_service.get_savings_recommendations.return_value = (
                     mock_savings_data
@@ -154,7 +160,9 @@ class TestFastMCPToolsIntegration:
                 },
             }
 
-            with patch("moneywiz_mcp_server.main.TrendService") as mock_service_class:
+            with patch(
+                "moneywiz_mcp_server.services.trend_service.TrendService"
+            ) as mock_service_class:
                 mock_service = AsyncMock()
                 mock_service.analyze_spending_trends.return_value = mock_trend_data
                 mock_service_class.return_value = mock_service
@@ -165,7 +173,7 @@ class TestFastMCPToolsIntegration:
             # Assert
             assert result.period["months_analyzed"] == 6
             assert len(result.monthly_data) > 0
-            assert result.statistics["trend_direction"] == "increasing"
+            assert result.statistics.trend_direction == "increasing"
             assert len(result.insights) > 0
             assert len(result.projections) > 0
 
@@ -232,7 +240,9 @@ class TestFastMCPToolsIntegration:
                 ],
             }
 
-            with patch("moneywiz_mcp_server.main.TrendService") as mock_service_class:
+            with patch(
+                "moneywiz_mcp_server.services.trend_service.TrendService"
+            ) as mock_service_class:
                 mock_service = AsyncMock()
                 mock_service.analyze_category_trends.return_value = mock_category_data
                 mock_service_class.return_value = mock_service
@@ -243,8 +253,8 @@ class TestFastMCPToolsIntegration:
             # Assert
             assert result.period["months_analyzed"] == 6
             assert len(result.category_trends) == 2
-            assert result.category_trends[0]["category"] == "Groceries"
-            assert result.category_trends[1]["category"] == "Entertainment"
+            assert result.category_trends[0].category == "Groceries"
+            assert result.category_trends[1].category == "Entertainment"
             assert len(result.overall_insights) > 0
 
             # Verify service was called correctly
@@ -291,6 +301,8 @@ class TestFastMCPToolsIntegration:
                     },
                     "savings_rate": {
                         "direction": "increasing",
+                        "growth_rate": 1.5,
+                        "stability": "improving",
                         "average": 17.3,
                         "improving": True,
                     },
@@ -305,7 +317,9 @@ class TestFastMCPToolsIntegration:
                 ],
             }
 
-            with patch("moneywiz_mcp_server.main.TrendService") as mock_service_class:
+            with patch(
+                "moneywiz_mcp_server.services.trend_service.TrendService"
+            ) as mock_service_class:
                 mock_service = AsyncMock()
                 mock_service.analyze_income_vs_expense_trends.return_value = (
                     mock_income_expense_data
@@ -318,8 +332,8 @@ class TestFastMCPToolsIntegration:
             # Assert
             assert result.period["months_analyzed"] == 12
             assert len(result.monthly_data) == 2
-            assert result.trends["income"]["direction"] == "increasing"
-            assert result.trends["savings_rate"]["improving"] is True
+            assert result.trends["income"].direction == "increasing"
+            assert result.trends["savings_rate"].improving is True
             assert len(result.insights) > 0
 
             # Verify service call
@@ -336,7 +350,9 @@ class TestFastMCPToolsIntegration:
             mock_get_db.return_value = mock_db
 
             # Mock to raise an exception to test cleanup
-            with patch("moneywiz_mcp_server.main.SavingsService") as mock_service_class:
+            with patch(
+                "moneywiz_mcp_server.services.savings_service.SavingsService"
+            ) as mock_service_class:
                 mock_service = AsyncMock()
                 mock_service.get_savings_recommendations.side_effect = Exception(
                     "Test error"
