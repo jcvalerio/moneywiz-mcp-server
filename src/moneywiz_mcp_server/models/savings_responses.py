@@ -43,12 +43,14 @@ class AnalysisPeriodData(TypedDict):
     data_quality: str
 
 
-class VisualizationData(TypedDict):
+class VisualizationData(TypedDict, total=False):
     """TypedDict for visualization data."""
 
     chart_type: str
     data_points: list[dict[str, float]]
     labels: list[str]
+    line_chart: dict[str, Any]  # Add this field that the service actually provides
+    bar_chart: dict[str, Any]  # Add this field that the service actually provides
 
 
 class SavingsRecommendation(BaseModel):
