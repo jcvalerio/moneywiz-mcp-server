@@ -33,17 +33,20 @@ class TestSavingsService:
         """Sample income vs expense data for testing."""
         from datetime import datetime
 
+        from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+
         return IncomeExpenseAnalysis(
-            total_income=Decimal("5000.00"),
-            total_expenses=Decimal("4000.00"),
-            net_savings=Decimal("1000.00"),
-            savings_rate=20.0,  # float not Decimal
+            total_income=CurrencyAmounts({"USD": Decimal("5000.00")}),
+            total_expenses=CurrencyAmounts({"USD": Decimal("4000.00")}),
+            net_savings=CurrencyAmounts({"USD": Decimal("1000.00")}),
+            savings_rate={"USD": Decimal("20.0")},
             income_breakdown=[],
             expense_breakdown=[],
             analysis_period=DateRange(
                 start_date=datetime(2024, 1, 1), end_date=datetime(2024, 3, 31)
             ),
-            currency="USD",
+            currencies_found=["USD"],
+            primary_currency="USD",
             monthly_averages={},
         )
 
@@ -57,7 +60,7 @@ class TestSavingsService:
                 total_amount=Decimal("800.00"),
                 transaction_count=20,
                 average_amount=Decimal("40.00"),
-                percentage_of_total=20.0,
+                percentage_of_total=Decimal("20.0"),
             ),
             CategoryExpense(
                 category_name="Entertainment",
@@ -65,7 +68,7 @@ class TestSavingsService:
                 total_amount=Decimal("600.00"),
                 transaction_count=15,
                 average_amount=Decimal("40.00"),
-                percentage_of_total=15.0,
+                percentage_of_total=Decimal("15.0"),
             ),
             CategoryExpense(
                 category_name="Dining Out",
@@ -73,7 +76,7 @@ class TestSavingsService:
                 total_amount=Decimal("400.00"),
                 transaction_count=10,
                 average_amount=Decimal("40.00"),
-                percentage_of_total=10.0,
+                percentage_of_total=Decimal("10.0"),
             ),
         ]
 
@@ -147,7 +150,7 @@ class TestSavingsService:
             total_amount=Decimal("1200.00"),
             transaction_count=30,
             average_amount=Decimal("40.00"),
-            percentage_of_total=30.0,  # >20% triggers recommendation
+            percentage_of_total=Decimal("30.0"),  # >20% triggers recommendation
         )
 
         categories = [high_spending_category, *sample_category_expenses]
@@ -186,7 +189,7 @@ class TestSavingsService:
             total_amount=Decimal("600.00"),
             transaction_count=15,
             average_amount=Decimal("40.00"),
-            percentage_of_total=15.0,
+            percentage_of_total=Decimal("15.0"),
         )
 
         categories = [discretionary_category]

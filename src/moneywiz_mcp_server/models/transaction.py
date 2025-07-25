@@ -20,6 +20,7 @@ class TransactionType(Enum):
     REFUND = "refund"  # ENT 43
     RECONCILE = "reconcile"  # ENT 42
     TRANSFER_BUDGET = "transfer_budget"  # ENT 44
+    ADJUST_BALANCE = "adjust_balance"  # Balance adjustment transactions
     UNKNOWN = "unknown"
 
 

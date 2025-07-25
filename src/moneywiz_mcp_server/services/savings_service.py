@@ -51,10 +51,19 @@ class SavingsService:
         )
 
         # Calculate current state
-        current_savings_rate = float(income_expense.savings_rate)
-        total_income = float(income_expense.total_income)
-        total_expenses = float(income_expense.total_expenses)
-        net_savings = float(income_expense.net_savings)
+        primary_currency = income_expense.primary_currency
+        current_savings_rate = float(
+            income_expense.savings_rate.get(primary_currency, Decimal("0"))
+        )
+        total_income = float(
+            income_expense.total_income.get(primary_currency, Decimal("0"))
+        )
+        total_expenses = float(
+            income_expense.total_expenses.get(primary_currency, Decimal("0"))
+        )
+        net_savings = float(
+            income_expense.net_savings.get(primary_currency, Decimal("0"))
+        )
 
         # Generate recommendations
         recommendations = []
@@ -179,7 +188,7 @@ class SavingsService:
                     {
                         "type": "discretionary_reduction",
                         "priority": "medium",
-                        "priority_score": category_percentage * 0.8,
+                        "priority_score": float(category_percentage) * 0.8,
                         "title": f"Optimize {category_name} Spending",
                         "description": f"Discretionary spending on {category_name} "
                         f"could be reduced by 25% without major lifestyle impact.",

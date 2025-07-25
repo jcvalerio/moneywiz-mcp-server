@@ -1,8 +1,51 @@
 """Pydantic response models for savings and trend analysis."""
 
-from typing import Any
+from typing import TypedDict
 
 from pydantic import BaseModel, Field
+
+
+class FixedVsVariableData(TypedDict):
+    """TypedDict for fixed vs variable expense insights."""
+
+    fixed_percentage: float
+    variable_percentage: float
+    top_fixed_categories: list[str]
+    optimization_opportunities: list[str]
+
+
+class SpendingPatternsData(TypedDict):
+    """TypedDict for spending pattern insights."""
+
+    trend: str  # "increasing", "decreasing", "stable"
+    volatility: float  # 0.0-1.0
+    peak_periods: list[str]
+    recommendations: list[str]
+
+
+class CategoryAnalysisData(TypedDict):
+    """TypedDict for category-based insights."""
+
+    highest_impact_categories: list[str]
+    growth_categories: list[str]
+    reduction_opportunities: list[str]
+
+
+class AnalysisPeriodData(TypedDict):
+    """TypedDict for analysis period details."""
+
+    start_date: str
+    end_date: str
+    duration_months: int
+    data_quality: str
+
+
+class VisualizationData(TypedDict):
+    """TypedDict for visualization data."""
+
+    chart_type: str
+    data_points: list[dict[str, float]]
+    labels: list[str]
 
 
 class SavingsRecommendation(BaseModel):
@@ -48,13 +91,13 @@ class TargetSavingsState(BaseModel):
 class SavingsInsights(BaseModel):
     """Model for savings insights."""
 
-    fixed_vs_variable: dict[str, Any] = Field(
+    fixed_vs_variable: FixedVsVariableData = Field(
         ..., description="Fixed vs variable expense insights"
     )
-    spending_patterns: dict[str, Any] = Field(
+    spending_patterns: SpendingPatternsData = Field(
         ..., description="Spending pattern insights"
     )
-    category_analysis: dict[str, Any] = Field(
+    category_analysis: CategoryAnalysisData = Field(
         ..., description="Category-based insights"
     )
 
@@ -116,12 +159,12 @@ class TrendInsight(BaseModel):
 class SpendingTrendResponse(BaseModel):
     """Response model for spending trend analysis."""
 
-    period: dict[str, Any] = Field(..., description="Analysis period details")
+    period: AnalysisPeriodData = Field(..., description="Analysis period details")
     monthly_data: list[MonthlyTrendData] = Field(..., description="Monthly breakdown")
     statistics: TrendStatistics = Field(..., description="Trend statistics")
     insights: list[TrendInsight] = Field(..., description="Trend insights")
     projections: list[TrendProjection] = Field(..., description="Future projections")
-    visualizations: dict[str, Any] = Field(..., description="Visualization data")
+    visualizations: VisualizationData = Field(..., description="Visualization data")
 
 
 class CategoryTrend(BaseModel):
@@ -139,7 +182,7 @@ class CategoryTrend(BaseModel):
 class CategoryTrendsResponse(BaseModel):
     """Response model for category trends analysis."""
 
-    period: dict[str, Any] = Field(..., description="Analysis period details")
+    period: AnalysisPeriodData = Field(..., description="Analysis period details")
     category_trends: list[CategoryTrend] = Field(..., description="Trends by category")
     overall_insights: list[TrendInsight] = Field(..., description="Overall insights")
 
@@ -167,7 +210,7 @@ class MonthlyIncomeExpenseData(BaseModel):
 class IncomeVsExpenseTrendsResponse(BaseModel):
     """Response model for income vs expense trends."""
 
-    period: dict[str, Any] = Field(..., description="Analysis period")
+    period: AnalysisPeriodData = Field(..., description="Analysis period")
     monthly_data: list[MonthlyIncomeExpenseData] = Field(
         ..., description="Monthly breakdown"
     )
