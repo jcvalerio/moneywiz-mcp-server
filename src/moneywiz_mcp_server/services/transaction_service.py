@@ -3,7 +3,8 @@
 from datetime import datetime
 from decimal import Decimal
 import logging
-from typing import TypedDict
+
+from typing_extensions import TypedDict
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.analytics_result import (

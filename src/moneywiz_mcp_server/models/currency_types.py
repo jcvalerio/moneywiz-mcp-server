@@ -233,7 +233,9 @@ class CurrencyAmounts:
     ) -> core_schema.CoreSchema:
         """Pydantic core schema for CurrencyAmounts validation and serialization."""
 
-        def validate_currency_amounts(value: Any, info=None) -> "CurrencyAmounts":
+        def validate_currency_amounts(
+            value: Any, info: Any = None
+        ) -> "CurrencyAmounts":
             """Validate and convert input to CurrencyAmounts."""
             if isinstance(value, CurrencyAmounts):
                 return value

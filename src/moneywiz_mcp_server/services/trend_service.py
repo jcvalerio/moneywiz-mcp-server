@@ -4,7 +4,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
 import logging
-from typing import Any, TypedDict
+from typing import Any
+
+from typing_extensions import TypedDict
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.transaction import TransactionModel

@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TypedDict
+
+from typing_extensions import TypedDict
 
 from .currency_types import CurrencyAmounts
 from .transaction import DateRange

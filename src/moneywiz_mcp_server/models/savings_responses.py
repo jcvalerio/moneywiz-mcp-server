@@ -1,11 +1,12 @@
 """Pydantic response models for savings and trend analysis."""
 
-from typing import TypedDict
+from typing import Any
 
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 
-class FixedVsVariableData(TypedDict):
+class FixedVsVariableData(TypedDict, total=False):
     """TypedDict for fixed vs variable expense insights."""
 
     fixed_percentage: float
@@ -14,21 +15,23 @@ class FixedVsVariableData(TypedDict):
     optimization_opportunities: list[str]
 
 
-class SpendingPatternsData(TypedDict):
+class SpendingPatternsData(TypedDict, total=False):
     """TypedDict for spending pattern insights."""
 
     trend: str  # "increasing", "decreasing", "stable"
     volatility: float  # 0.0-1.0
     peak_periods: list[str]
     recommendations: list[str]
+    patterns_detected: list[str]  # Add this field that the service actually provides
 
 
-class CategoryAnalysisData(TypedDict):
+class CategoryAnalysisData(TypedDict, total=False):
     """TypedDict for category-based insights."""
 
     highest_impact_categories: list[str]
     growth_categories: list[str]
     reduction_opportunities: list[str]
+    concentration: dict[str, Any]  # Add this field that the service actually provides
 
 
 class AnalysisPeriodData(TypedDict):
