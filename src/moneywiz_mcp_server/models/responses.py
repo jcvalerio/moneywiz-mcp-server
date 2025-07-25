@@ -1,8 +1,56 @@
 """Pydantic response models for structured MCP output."""
 
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from .base import BaseAnalysisResponse, BaseCurrencyResponse, FilterData
+from .currency_types import CurrencyAmounts
+
+
+class RecentTransactionData(BaseModel):
+    """Model for recent transaction data in account details."""
+
+    id: str = Field(..., description="Transaction ID")
+    date: str = Field(..., description="Transaction date (ISO format)")
+    description: str = Field(..., description="Transaction description")
+    amount: float = Field(..., description="Transaction amount")
+    category: str = Field(..., description="Transaction category")
+    transaction_type: str = Field(..., description="Transaction type")
+
+
+class AnalysisSummaryData(BaseModel):
+    """Model for analysis summary statistics."""
+
+    total_categories: int = Field(..., description="Total number of categories")
+    categories_analyzed: int = Field(..., description="Number of categories analyzed")
+    analysis_complete: bool = Field(..., description="Whether analysis is complete")
+
+
+class AnalysisInsightsData(BaseModel):
+    """Model for analysis insights and recommendations."""
+
+    currencies_found: list[str] = Field(..., description="List of currencies found")
+    multi_currency_spending: bool = Field(
+        ..., description="Whether spending is multi-currency"
+    )
+
+
+class ExpenseBreakdownData(BaseModel):
+    """Model for expense breakdown data."""
+
+    category_name: str = Field(..., description="Category name")
+    total_amount: float = Field(..., description="Total amount spent")
+    percentage_of_total: float = Field(..., description="Percentage of total expenses")
+
+
+class ErrorDetailsData(BaseModel):
+    """Model for error details."""
+
+    code: str | None = Field(None, description="Error code")
+    context: str | None = Field(None, description="Error context")
+    suggestion: str | None = Field(None, description="Suggested resolution")
 
 
 class AccountResponse(BaseModel):
@@ -11,7 +59,7 @@ class AccountResponse(BaseModel):
     id: str = Field(..., description="Unique account identifier")
     name: str = Field(..., description="Account name")
     type: str = Field(..., description="Account type (checking, savings, etc.)")
-    balance: str = Field(..., description="Formatted current balance with currency")
+    balance: float = Field(..., description="Current account balance")
     currency: str = Field(..., description="Account currency code")
     entity_type: str = Field(..., description="MoneyWiz entity type")
     last_updated: str = Field(..., description="Last update timestamp")
@@ -23,7 +71,7 @@ class AccountListResponse(BaseModel):
 
     accounts: list[AccountResponse] = Field(..., description="List of accounts")
     total_count: int = Field(..., description="Total number of accounts")
-    filters_applied: dict[str, Any] = Field(
+    filters_applied: FilterData | dict[str, Any] = Field(
         default_factory=dict, description="Applied filters"
     )
 
@@ -35,7 +83,7 @@ class AccountDetailResponse(AccountResponse):
     institution: str = Field(..., description="Financial institution")
     account_info: str = Field(..., description="Additional account information")
     last_four_digits: str = Field(..., description="Last four digits of account number")
-    recent_transactions: list[dict[str, Any]] = Field(
+    recent_transactions: list[RecentTransactionData] = Field(
         default_factory=list, description="Recent transactions"
     )
 
@@ -46,7 +94,7 @@ class TransactionResponse(BaseModel):
     id: str = Field(..., description="Transaction ID")
     date: str = Field(..., description="Transaction date (ISO format)")
     description: str = Field(..., description="Transaction description")
-    amount: str = Field(..., description="Formatted amount with currency")
+    amount: float = Field(..., description="Transaction amount")
     category: str = Field(..., description="Transaction category")
     payee: str = Field(..., description="Transaction payee")
     account_id: str = Field(..., description="Associated account ID")
@@ -64,55 +112,74 @@ class TransactionListResponse(BaseModel):
     )
     total_count: int = Field(..., description="Total number of transactions found")
     date_range: str = Field(..., description="Date range searched")
-    filters_applied: dict[str, Any] = Field(
+    filters_applied: FilterData | dict[str, Any] = Field(
         default_factory=dict, description="Applied filters"
     )
 
 
-class CategoryExpenseResponse(BaseModel):
-    """Response model for category expense data."""
+class CategoryExpenseResponse(BaseCurrencyResponse):
+    """Response model for category expense data with multi-currency support."""
 
     rank: int = Field(..., description="Category rank by expense amount")
     category: str = Field(..., description="Category name")
-    total_amount: str = Field(..., description="Total amount spent in category")
-    transaction_count: int = Field(
-        ..., description="Number of transactions in category"
+    currency_amounts: CurrencyAmounts = Field(
+        ..., description="Total amounts spent by currency"
     )
-    average_amount: str = Field(..., description="Average amount per transaction")
-    percentage_of_total: float = Field(..., description="Percentage of total expenses")
+    transaction_counts_by_currency: dict[str, int] = Field(
+        ..., description="Number of transactions by currency"
+    )
+    average_amounts: CurrencyAmounts = Field(
+        ..., description="Average amounts by currency"
+    )
+    percentage_within_currency: dict[str, Decimal] = Field(
+        ..., description="Percentage of total expenses within each currency"
+    )
     impact_level: str = Field(..., description="Impact level (high/medium/low)")
 
 
-class ExpenseAnalysisResponse(BaseModel):
+class ExpenseAnalysisResponse(BaseAnalysisResponse, BaseCurrencyResponse):
     """Response model for expense analysis by category."""
 
-    analysis_period: str = Field(..., description="Time period analyzed")
-    total_expenses: str = Field(..., description="Total expenses in period")
-    currency: str = Field(..., description="Currency used")
-    top_categories: list[CategoryExpenseResponse] = Field(
-        ..., description="Top expense categories"
+    total_expenses: CurrencyAmounts = Field(
+        ..., description="Total expenses by currency"
     )
-    summary: dict[str, Any] = Field(..., description="Analysis summary statistics")
-    insights: dict[str, Any] | None = Field(
+    top_categories: list[CategoryExpenseResponse] = Field(
+        ..., description="Top expense categories with currency breakdown"
+    )
+    summary: AnalysisSummaryData = Field(..., description="Analysis summary statistics")
+    insights: AnalysisInsightsData | None = Field(
         None, description="Analysis insights and recommendations"
     )
 
 
-class FinancialOverviewResponse(BaseModel):
+class FinancialOverviewResponse(BaseCurrencyResponse):
     """Response model for financial overview data."""
 
-    total_income: str = Field(..., description="Total income in period")
-    total_expenses: str = Field(..., description="Total expenses in period")
-    net_savings: str = Field(..., description="Net savings (income - expenses)")
-    savings_rate: str = Field(..., description="Savings rate as percentage")
-    currency: str = Field(..., description="Currency used")
+    total_income: CurrencyAmounts = Field(..., description="Total income by currency")
+    total_expenses: CurrencyAmounts = Field(
+        ..., description="Total expenses by currency"
+    )
+    net_savings: CurrencyAmounts = Field(
+        ..., description="Net savings by currency (income - expenses)"
+    )
+    savings_rate: dict[str, Decimal] = Field(
+        ..., description="Savings rate as percentage by currency"
+    )
+    currencies_found: list[str] = Field(
+        ..., description="List of currencies found in the data"
+    )
+    primary_currency: str = Field(
+        ..., description="Primary currency (highest activity)"
+    )
 
 
-class SavingsAnalysisResponse(BaseModel):
+class SavingsAnalysisResponse(BaseCurrencyResponse):
     """Response model for savings analysis."""
 
     status: str = Field(..., description="Savings status (positive/negative)")
-    monthly_savings: str = Field(..., description="Average monthly savings")
+    monthly_savings: CurrencyAmounts = Field(
+        ..., description="Average monthly savings by currency"
+    )
     recommendations: list[str] = Field(..., description="Savings recommendations")
 
 
@@ -123,7 +190,7 @@ class IncomeVsExpensesResponse(BaseModel):
     financial_overview: FinancialOverviewResponse = Field(
         ..., description="Financial overview"
     )
-    expense_breakdown: list[dict[str, Any]] = Field(
+    expense_breakdown: list[ExpenseBreakdownData] = Field(
         ..., description="Top expense categories"
     )
     savings_analysis: SavingsAnalysisResponse = Field(
@@ -136,4 +203,6 @@ class ErrorResponse(BaseModel):
 
     error: str = Field(..., description="Error message")
     error_type: str = Field(..., description="Type of error")
-    details: dict[str, Any] | None = Field(None, description="Additional error details")
+    details: ErrorDetailsData | None = Field(
+        None, description="Additional error details"
+    )

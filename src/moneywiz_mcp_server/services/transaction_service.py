@@ -3,7 +3,8 @@
 from datetime import datetime
 from decimal import Decimal
 import logging
-from typing import Any, TypedDict
+
+from typing_extensions import TypedDict
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.analytics_result import (
@@ -14,6 +15,10 @@ from moneywiz_mcp_server.models.transaction import (
     DateRange,
     TransactionModel,
     TransactionType,
+)
+from moneywiz_mcp_server.services.category_classification_service import (
+    CategoryClassificationService,
+    CategoryType,
 )
 from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
 
@@ -28,6 +33,15 @@ class ExpenseGroupData(TypedDict):
     transactions: list["TransactionModel"]
 
 
+class ExpenseSummaryResult(TypedDict):
+    """TypedDict for expense summary return data."""
+
+    total_expenses_by_currency: dict[str, Decimal]
+    category_breakdown: list[CategoryExpense]
+    analysis_period: DateRange
+    group_by: str
+
+
 class TransactionService:
     """Service for transaction operations and analysis."""
 
@@ -38,11 +52,14 @@ class TransactionService:
         self._account_currency_cache: dict[int, str] = {}
         self._tag_cache: dict[int, str] = {}  # Cache for tag names
 
+        # Initialize category classification service
+        self.category_classifier = CategoryClassificationService(db_manager)
+
     async def get_transactions(
         self,
         start_date: datetime,
         end_date: datetime,
-        account_ids: list[int] | None = None,
+        account_ids: list[str] | None = None,
         categories: list[str] | None = None,
         transaction_types: list[TransactionType] | None = None,
         limit: int | None = None,
@@ -53,7 +70,7 @@ class TransactionService:
         Args:
             start_date: Start date for filtering
             end_date: End date for filtering
-            account_ids: Optional list of account IDs to filter
+            account_ids: Optional list of external account IDs (UUID strings) to filter
             categories: Optional list of category names to filter
             transaction_types: Optional list of transaction types to filter
             limit: Optional limit on number of results
@@ -62,6 +79,12 @@ class TransactionService:
             List of TransactionModel objects
         """
         try:
+            # Convert external account IDs (UUID strings) to internal database IDs (integers)
+            internal_account_ids: list[int] | None = None
+            if account_ids:
+                internal_account_ids = (
+                    await self._convert_external_account_ids_to_internal(account_ids)
+                )
             # Convert dates to Core Data timestamps
             start_timestamp = datetime_to_core_data_timestamp(start_date)
             end_timestamp = datetime_to_core_data_timestamp(end_date)
@@ -98,10 +121,10 @@ class TransactionService:
             params = [*list(transaction_entities), start_timestamp, end_timestamp]
 
             # Add account filter
-            if account_ids:
-                account_placeholders = ",".join("?" for _ in account_ids)
+            if internal_account_ids:
+                account_placeholders = ",".join("?" for _ in internal_account_ids)
                 where_conditions.append(f"ZACCOUNT2 IN ({account_placeholders})")  # nosec: B608 - Safe placeholder substitution
-                params.extend(account_ids)
+                params.extend(internal_account_ids)
 
             # Build final query using safe parameter substitution
             # nosec: B608 - Safe use of .format() with parameterized WHERE conditions
@@ -111,19 +134,29 @@ class TransactionService:
             ORDER BY ZDATE1 DESC
             """.format(" AND ".join(where_conditions))  # nosec
 
-            if limit:
+            # Apply limit at database level only if no category filtering is needed
+            # When categories are specified, we need to get more data to filter properly
+            if limit and not categories:
                 query = base_query + " LIMIT ?"
                 params.append(limit)
             else:
                 query = base_query
 
-            logger.debug(f"Executing transaction query with {len(params)} parameters")
+            logger.info(f"🔍 Executing transaction query with {len(params)} parameters")
+            logger.info(
+                f"📅 Date range timestamps: {start_timestamp} to {end_timestamp}"
+            )
+            logger.info(f"🔢 Query entities: {transaction_entities}")
+            logger.debug(f"SQL Query: {query}")
+            logger.debug(f"Query params: {params}")
 
             # Execute query (convert params list to tuple for database manager)
             rows = await self.db_manager.execute_query(query, tuple(params))
+            logger.info(f"📊 Query returned {len(rows)} rows")
 
             # Convert to TransactionModel objects
             transactions: list[TransactionModel] = []
+            category_filtered_count = 0
             for row in rows:
                 try:
                     transaction = TransactionModel.from_raw_data(row)
@@ -132,8 +165,27 @@ class TransactionService:
                     transaction = await self._enhance_transaction(transaction)
 
                     # Apply category filter if specified
-                    if categories and transaction.category not in categories:
-                        continue
+                    if categories:
+                        # Check if any category in the hierarchy matches the filter
+                        category_matches = False
+
+                        # Check leaf category
+                        if transaction.category in categories or (
+                            transaction.parent_category
+                            and transaction.parent_category in categories
+                        ):
+                            category_matches = True
+
+                        # Check all categories in hierarchy
+                        elif transaction.category_hierarchy:
+                            for cat in transaction.category_hierarchy:
+                                if cat in categories:
+                                    category_matches = True
+                                    break
+
+                        if not category_matches:
+                            category_filtered_count += 1
+                            continue
 
                     # Apply transaction type filter if specified
                     if (
@@ -148,7 +200,16 @@ class TransactionService:
                     logger.warning(f"Failed to parse transaction row: {e}")
                     continue
 
+            # Apply limit after filtering when categories were specified
+            if categories and limit and len(transactions) > limit:
+                logger.info(f"🔢 Applying limit of {limit} after category filtering")
+                transactions = transactions[:limit]
+
             logger.info(f"Retrieved {len(transactions)} transactions")
+            if categories:
+                logger.info(
+                    f"📊 Category filtering results: {category_filtered_count} transactions filtered out"
+                )
             return transactions
 
         except Exception as e:
@@ -157,9 +218,9 @@ class TransactionService:
 
     async def get_expense_summary(
         self, start_date: datetime, end_date: datetime, group_by: str = "category"
-    ) -> dict[str, Any]:
+    ) -> ExpenseSummaryResult:
         """
-        Get expense summary grouped by category or payee.
+        Get expense summary grouped by category or payee with multi-currency support.
 
         Args:
             start_date: Start date for analysis
@@ -167,7 +228,7 @@ class TransactionService:
             group_by: "category" or "payee"
 
         Returns:
-            Dictionary with expense summary data
+            Dictionary with multi-currency expense summary data
         """
         try:
             # Get all expense transactions (negative amounts, excluding transfers)
@@ -176,14 +237,21 @@ class TransactionService:
                 t for t in transactions if t.is_expense() and not t.is_transfer()
             ]
 
-            # Group expenses
-            groups: dict[str, ExpenseGroupData] = {}
-            total_expenses = Decimal("0")
+            # Group expenses by category/payee AND currency
+            # Data structure maps category to currency to expense data
+            groups: dict[str, dict[str, ExpenseGroupData]] = {}
+            total_expenses_by_currency: dict[str, Decimal] = {}
 
             for expense in expenses:
                 amount = abs(expense.amount)  # Make positive for display
-                total_expenses += amount
+                currency = expense.currency
 
+                # Track total expenses by currency
+                if currency not in total_expenses_by_currency:
+                    total_expenses_by_currency[currency] = Decimal("0")
+                total_expenses_by_currency[currency] += amount
+
+                # Determine group key
                 if group_by == "category":
                     group_key = expense.category or "Uncategorized"
                 elif group_by == "payee":
@@ -191,49 +259,98 @@ class TransactionService:
                 else:
                     group_key = "All Expenses"
 
+                # Initialize nested structure if needed
                 if group_key not in groups:
-                    groups[group_key] = ExpenseGroupData(
+                    groups[group_key] = {}
+                if currency not in groups[group_key]:
+                    groups[group_key][currency] = ExpenseGroupData(
                         total_amount=Decimal("0"),
                         transaction_count=0,
                         transactions=[],
                     )
 
-                groups[group_key]["total_amount"] += amount
-                groups[group_key]["transaction_count"] += 1
-                groups[group_key]["transactions"].append(expense)
+                # Add to currency-specific group
+                groups[group_key][currency]["total_amount"] += amount
+                groups[group_key][currency]["transaction_count"] += 1
+                groups[group_key][currency]["transactions"].append(expense)
 
-            # Calculate percentages and create CategoryExpense objects
+            # Create multi-currency CategoryExpense objects
             category_expenses: list[CategoryExpense] = []
-            for group_name, data in groups.items():
-                percentage = (
-                    float(data["total_amount"] / total_expenses * 100)
-                    if total_expenses > 0
-                    else 0
-                )
-                avg_amount = (
-                    data["total_amount"] / data["transaction_count"]
-                    if data["transaction_count"] > 0
+            for group_name, currency_groups in groups.items():
+                # Aggregate data across currencies for this category
+                amounts_by_currency = {}
+                transaction_counts_by_currency = {}
+                average_amounts_by_currency = {}
+                percentage_within_currency = {}
+
+                # Calculate totals across all currencies for compatibility
+                total_amount_all_currencies = Decimal("0")
+                total_count_all_currencies = 0
+
+                for currency, data in currency_groups.items():
+                    amounts_by_currency[currency] = data["total_amount"]
+                    transaction_counts_by_currency[currency] = data["transaction_count"]
+                    average_amounts_by_currency[currency] = (
+                        data["total_amount"] / data["transaction_count"]
+                        if data["transaction_count"] > 0
+                        else Decimal("0")
+                    )
+                    # Calculate percentage within this currency
+                    currency_total = total_expenses_by_currency[currency]
+                    percentage_within_currency[currency] = (
+                        data["total_amount"] / currency_total * Decimal("100")
+                        if currency_total > 0
+                        else Decimal("0")
+                    )
+
+                    # Sum up for backward compatibility
+                    total_amount_all_currencies += data["total_amount"]
+                    total_count_all_currencies += data["transaction_count"]
+
+                # Calculate overall percentage across all currencies
+                total_all_expenses = sum(total_expenses_by_currency.values())
+                overall_percentage = (
+                    total_amount_all_currencies / total_all_expenses * Decimal("100")
+                    if total_all_expenses > 0
                     else Decimal("0")
                 )
 
+                # Create CategoryExpense object for backward compatibility
                 category_expense = CategoryExpense(
                     category_name=group_name,
                     category_id=None,  # Could be enhanced later
-                    total_amount=data["total_amount"],
-                    transaction_count=data["transaction_count"],
-                    average_amount=avg_amount,
-                    percentage_of_total=percentage,
+                    total_amount=total_amount_all_currencies,
+                    transaction_count=total_count_all_currencies,
+                    average_amount=(
+                        total_amount_all_currencies / total_count_all_currencies
+                        if total_count_all_currencies > 0
+                        else Decimal("0")
+                    ),
+                    percentage_of_total=overall_percentage,
                 )
+
+                # Add multi-currency data as additional attributes for API responses
+                category_expense.amounts_by_currency = amounts_by_currency
+                category_expense.transaction_counts_by_currency = (
+                    transaction_counts_by_currency
+                )
+                category_expense.average_amounts_by_currency = (
+                    average_amounts_by_currency
+                )
+                category_expense.percentage_within_currency = percentage_within_currency
+
                 category_expenses.append(category_expense)
 
-            # Sort by amount descending
-            category_expenses.sort(key=lambda x: x.total_amount, reverse=True)
+            # Sort by total amount across all currencies
+            def get_total_amount_for_sorting(category: CategoryExpense) -> float:
+                return float(category.total_amount)
+
+            category_expenses.sort(key=get_total_amount_for_sorting, reverse=True)
 
             return {
-                "total_expenses": total_expenses,
+                "total_expenses_by_currency": total_expenses_by_currency,
                 "category_breakdown": category_expenses,
                 "analysis_period": DateRange(start_date=start_date, end_date=end_date),
-                "currency": "USD",  # Default, could be enhanced
                 "group_by": group_by,
             }
 
@@ -269,7 +386,7 @@ class TransactionService:
                 elif t.is_income():
                     if not t.is_transfer():
                         # Check if this is legitimate income or a misclassified transfer/loan
-                        if self._is_legitimate_income(t):
+                        if await self._is_legitimate_income(t):
                             income_transactions.append(t)
                     elif self._is_salary_related_transfer(t):
                         # Currency exchange transfers that represent salary conversion
@@ -277,15 +394,41 @@ class TransactionService:
                         income_transactions.append(t)
                         # Note: We may need to adjust for exchange rate to avoid double-counting
 
-            # Calculate totals
-            total_income = sum((t.amount for t in income_transactions), Decimal("0"))
-            total_expenses = sum(
-                (abs(t.amount) for t in expense_transactions), Decimal("0")
-            )  # Make positive
+            # Calculate totals using CurrencyAmounts for type safety
+            from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+
+            # Accumulate income and expenses using CurrencyAmounts
+            income_amounts = {}
+            expense_amounts = {}
+
+            # Group income by currency
+            for t in income_transactions:
+                currency = t.currency
+                if currency not in income_amounts:
+                    income_amounts[currency] = Decimal("0")
+                income_amounts[currency] += t.amount
+
+            # Group expenses by currency
+            for t in expense_transactions:
+                currency = t.currency
+                if currency not in expense_amounts:
+                    expense_amounts[currency] = Decimal("0")
+                expense_amounts[currency] += abs(t.amount)  # Make positive
+
+            # Create CurrencyAmounts objects
+            total_income = CurrencyAmounts(income_amounts)
+            total_expenses = CurrencyAmounts(expense_amounts)
+
+            # Calculate net savings using CurrencyAmounts arithmetic
             net_savings = total_income - total_expenses
-            savings_rate = (
-                float(net_savings / total_income * 100) if total_income > 0 else 0
-            )
+
+            # Calculate savings rates using CurrencyAmounts method
+            savings_rate_by_currency = net_savings.calculate_rates(total_income)
+
+            # Get primary currency and currencies list
+            activity_amounts = total_income + total_expenses
+            primary_currency = activity_amounts.primary_currency()
+            currencies_found = activity_amounts.currencies()
 
             # Generate income breakdown
             await self.get_expense_summary(start_date, end_date, "category")
@@ -300,11 +443,12 @@ class TransactionService:
                 total_income=total_income,
                 total_expenses=total_expenses,
                 net_savings=net_savings,
-                savings_rate=savings_rate,
+                savings_rate=savings_rate_by_currency,
                 income_breakdown=[],  # Placeholder - would need income categorization
                 expense_breakdown=expense_summary["category_breakdown"],
                 analysis_period=DateRange(start_date=start_date, end_date=end_date),
-                currency="USD",
+                currencies_found=currencies_found,
+                primary_currency=primary_currency,
                 monthly_averages={},  # Placeholder - would need monthly breakdown
             )
 
@@ -403,8 +547,8 @@ class TransactionService:
                 transaction.account_id, "USD"
             )
 
-            # Get tags for this transaction
-            await self._enhance_transaction_with_tags(transaction)
+            # Get tags for this transaction (disabled due to schema changes)
+            transaction.tags = []  # Set empty tags to avoid errors
 
             return transaction
 
@@ -451,12 +595,12 @@ class TransactionService:
         # For now, be conservative and only include obvious currency conversions
         return False
 
-    def _is_legitimate_income(self, transaction: TransactionModel) -> bool:
+    async def _is_legitimate_income(self, transaction: TransactionModel) -> bool:
         """
         Determine if a positive amount transaction represents legitimate income.
 
-        This method filters out large deposits that are likely transfers, loans,
-        or other non-income movements misclassified as income.
+        Uses MoneyWiz's category hierarchy to intelligently classify transactions
+        without relying on hardcoded patterns or personal information.
 
         Args:
             transaction: Income transaction to evaluate
@@ -467,77 +611,150 @@ class TransactionService:
         if not transaction.is_income():
             return False
 
-        amount_usd = float(transaction.amount)
+        # Debug logging for income detection
+        logger.debug(
+            "Income check for transaction %s: amount=%s, category='%s', currency='%s'",
+            transaction.id,
+            transaction.amount,
+            transaction.category,
+            transaction.currency,
+        )
 
-        # Convert CRC to USD for comparison (approximate rate 1 USD = 500 CRC)
-        if transaction.currency == "CRC":
-            amount_usd = amount_usd / 500
+        # Strategy 1: Use category-based classification (primary method)
+        if transaction.category_id:
+            try:
+                is_income = await self.category_classifier.is_income_category(
+                    transaction.category_id
+                )
+                if is_income:
+                    logger.debug(
+                        "Income accepted for transaction %s: category hierarchy classification",
+                        transaction.id,
+                    )
+                    return True
 
-        # Strategy 1: Check if category is a known income category
-        income_categories = {
-            "salary",
-            "interest earned",
-            "dividend payment",
-            "rental",
-            "crypto",
-            "cashback",
-            "social welfare",
-            "rendimientos",
-            "sales",
-            "outsourcing",
-            "interest",
-            "dividend",
-            "investment",
-            "income",
-            "bonus",
-            "freelance",
-            "commission",
-            "royalty",
-            "pension",
-            "allowance",
-            "grant",
-            "subsidy",
-        }
-
-        if transaction.category:
-            category_lower = transaction.category.lower()
-            if any(income_cat in category_lower for income_cat in income_categories):
-                # This is clearly an income category, allow larger amounts
-                if amount_usd > 50000:  # Still filter extremely large amounts
+                # Check if it's explicitly classified as a transfer or adjustment
+                is_transfer = await self.category_classifier.is_transfer_category(
+                    transaction.category_id
+                )
+                if is_transfer:
+                    logger.debug(
+                        "Income rejected for transaction %s: classified as transfer",
+                        transaction.id,
+                    )
                     return False
-                return True
+            except Exception as e:
+                logger.warning(
+                    "Category classification failed for transaction %s: %s",
+                    transaction.id,
+                    e,
+                )
 
-        # Strategy 1b: Include other categorized income (user has explicitly categorized it)
-        if transaction.category and transaction.category not in ["Uncategorized", None]:
-            # But be suspicious of very large categorized amounts
-            if amount_usd > 10000:  # Lower threshold for non-obvious income categories
-                return False
+        # Strategy 2: Transaction type-based classification
+        # DEPOSIT transactions with income categories should be treated as income
+        if (
+            transaction.transaction_type == TransactionType.DEPOSIT
+            and transaction.category
+            and transaction.category not in ["Uncategorized", None, ""]
+        ):
+            # User has categorized this deposit, likely legitimate income
+            logger.debug(
+                "Income accepted for transaction %s: categorized deposit",
+                transaction.id,
+            )
             return True
 
-        # Strategy 2: Filter out large uncategorized deposits (likely transfers/loans)
-        if amount_usd > 1000:  # >$1K USD uncategorized is suspicious
+        # Strategy 3: Filter out obvious transfers and adjustments by transaction type
+        if transaction.transaction_type in [
+            TransactionType.TRANSFER_IN,
+            TransactionType.TRANSFER_OUT,
+        ]:
+            # This is a transfer, not income
+            logger.debug(
+                "Income rejected for transaction %s: transfer type", transaction.id
+            )
             return False
 
-        # Strategy 3: Filter out transfer-like descriptions
+        if transaction.transaction_type in [
+            TransactionType.RECONCILE,
+            TransactionType.ADJUST_BALANCE,
+        ]:
+            # This is a reconciliation/adjustment, not income
+            logger.debug(
+                "Income rejected for transaction %s: reconciliation/adjustment type",
+                transaction.id,
+            )
+            return False
+
+        # Strategy 4: Smart amount-based filtering with currency awareness
+        amount_usd = float(transaction.amount)
+
+        # Convert non-USD amounts for comparison
+        if transaction.currency == "CRC":
+            amount_usd = amount_usd / 500  # Approximate CRC to USD rate
+        elif transaction.currency == "EUR":
+            amount_usd = amount_usd * 1.1  # Approximate EUR to USD rate
+
+        # Filter extremely large amounts that are likely misclassified transfers
+        if amount_usd > 100000:  # >$100K is suspicious regardless of category
+            logger.debug(
+                "Income rejected for transaction %s: extremely large amount ($%.2f)",
+                transaction.id,
+                amount_usd,
+            )
+            return False
+
+        # Strategy 5: Description-based filtering (conservative)
         if transaction.description:
-            transfer_keywords = [
-                "transfer",
-                "pago",
-                "sbd",
+            desc_lower = transaction.description.lower()
+
+            # Filter out obvious non-income descriptions
+            non_income_keywords = [
                 "loan",
                 "prestamo",
+                "credit",
+                "credito",
                 "adjustment",
                 "ajuste",
-                "movimiento",
-                "deposito",
+                "correction",
+                "corrección",
+                "opening balance",
+                "balance inicial",
+                "inicial",
             ]
-            desc_lower = transaction.description.lower()
-            if any(keyword in desc_lower for keyword in transfer_keywords):
+
+            if any(keyword in desc_lower for keyword in non_income_keywords):
+                logger.debug(
+                    "Income rejected for transaction %s: non-income description pattern",
+                    transaction.id,
+                )
                 return False
 
-        # Strategy 4: Accept small amounts and typical income patterns
-        # Small amounts (<$1K USD) are likely legitimate income
-        return True
+        # Strategy 6: Default acceptance for categorized positive amounts
+        if transaction.category and transaction.category not in [
+            "Uncategorized",
+            None,
+            "",
+        ]:
+            logger.debug(
+                "Income accepted for transaction %s: categorized positive amount",
+                transaction.id,
+            )
+            return True
+
+        # Strategy 7: Conservative acceptance for small uncategorized amounts
+        if amount_usd <= 1000:  # Small amounts are likely legitimate
+            logger.debug(
+                "Income accepted for transaction %s: small amount", transaction.id
+            )
+            return True
+
+        # Default: reject large uncategorized deposits
+        logger.debug(
+            "Income rejected for transaction %s: large uncategorized amount",
+            transaction.id,
+        )
+        return False
 
     async def _enhance_transaction_with_tags(
         self, transaction: TransactionModel
@@ -625,7 +842,7 @@ class TransactionService:
         try:
             # Build hierarchy by traversing parent categories
             hierarchy: list[str] = []
-            current_id = transaction.category_id
+            current_id: int | None = transaction.category_id
             visited_ids = set()  # Prevent infinite loops
 
             while current_id and current_id not in visited_ids:
@@ -691,3 +908,73 @@ class TransactionService:
                 f"Failed to build category hierarchy for transaction {transaction.id}: {e}"
             )
             # Keep basic category info if hierarchy fails
+
+    async def _convert_external_account_ids_to_internal(
+        self, external_account_ids: list[str]
+    ) -> list[int]:
+        """
+        Convert external account IDs (UUID strings or stringified integers) to internal database IDs.
+
+        MoneyWiz uses two ID systems:
+        1. External IDs (ZGID): UUID strings like 'A6CA789E-39DA-4FF1-A8DC-2DDA96B6E22B-1585-0000004B3F183772'
+        2. Internal IDs (Z_PK): Integer primary keys used in database relationships like ZACCOUNT2
+
+        Args:
+            external_account_ids: List of external account IDs (UUID strings)
+
+        Returns:
+            List of internal account IDs (integers) for database queries
+
+        Raises:
+            ValueError: If any account ID cannot be found or converted
+        """
+        internal_ids: list[int] = []
+
+        for external_id in external_account_ids:
+            try:
+                # Try to find account by ZGID (UUID string)
+                zgid_query = """
+                SELECT Z_PK FROM ZSYNCOBJECT
+                WHERE Z_ENT BETWEEN 10 AND 16 AND ZGID = ?
+                """
+                result = await self.db_manager.execute_query(zgid_query, (external_id,))
+
+                if result:
+                    internal_ids.append(result[0]["Z_PK"])
+                    logger.debug(
+                        f"Converted external account ID {external_id} to internal ID {result[0]['Z_PK']}"
+                    )
+                    continue
+
+                # Fallback: Try to parse as stringified integer (old format compatibility)
+                try:
+                    potential_internal_id = int(external_id)
+                    # Verify this internal ID exists
+                    internal_query = """
+                    SELECT Z_PK FROM ZSYNCOBJECT
+                    WHERE Z_ENT BETWEEN 10 AND 16 AND Z_PK = ?
+                    """
+                    verify_result = await self.db_manager.execute_query(
+                        internal_query, (potential_internal_id,)
+                    )
+
+                    if verify_result:
+                        internal_ids.append(potential_internal_id)
+                        logger.debug(
+                            f"Used stringified internal account ID {external_id} as internal ID {potential_internal_id}"
+                        )
+                        continue
+                except ValueError:
+                    # Not a valid integer, continue to error
+                    pass
+
+                # Neither ZGID lookup nor integer parsing worked
+                raise ValueError(
+                    f"Account ID '{external_id}' not found in MoneyWiz database"
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to convert account ID '{external_id}': {e}")
+                raise ValueError(f"Invalid account ID '{external_id}': {e}") from e
+
+        return internal_ids

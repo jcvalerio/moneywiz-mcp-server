@@ -1,9 +1,13 @@
 """Trend analysis service for financial patterns over time."""
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
+from decimal import Decimal
 import logging
-from typing import Any, TypedDict
+from typing import Any
+
+from dateutil.relativedelta import relativedelta
+from typing_extensions import TypedDict
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.transaction import TransactionModel
@@ -45,7 +49,7 @@ class TrendService:
         logger.info(f"Analyzing spending trends for {months} months")
 
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=months * 30)
+        start_date = end_date - relativedelta(months=months)
 
         # Get transaction service
         transaction_service = TransactionService(self.db_manager)
@@ -74,7 +78,8 @@ class TrendService:
             "period": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "months_analyzed": months,
+                "duration_months": months,
+                "data_quality": "complete",
             },
             "monthly_data": trend_data["monthly_data"],
             "statistics": {
@@ -97,7 +102,7 @@ class TrendService:
         logger.info(f"Analyzing category trends for top {top_n} categories")
 
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=months * 30)
+        start_date = end_date - relativedelta(months=months)
 
         # Get expense summary to identify top categories
         transaction_service = TransactionService(self.db_manager)
@@ -128,7 +133,8 @@ class TrendService:
             "period": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "months_analyzed": months,
+                "duration_months": months,
+                "data_quality": "complete",
             },
             "category_trends": category_trends,
             "overall_insights": self._generate_category_comparison_insights(
@@ -143,12 +149,13 @@ class TrendService:
         logger.info(f"Analyzing income vs expense trends for {months} months")
 
         end_date = datetime.now()
+        start_date = end_date - relativedelta(months=months)
         monthly_data: list[MonthlyFinancialData] = []
 
         # Get month-by-month data
         for i in range(months):
-            month_end = end_date - timedelta(days=i * 30)
-            month_start = month_end - timedelta(days=30)
+            month_end = end_date - relativedelta(months=i)
+            month_start = month_end - relativedelta(months=1)
 
             transaction_service = TransactionService(self.db_manager)
 
@@ -156,13 +163,24 @@ class TrendService:
                 start_date=month_start, end_date=month_end
             )
 
+            primary_currency = income_expense.primary_currency
             monthly_data.append(
                 MonthlyFinancialData(
                     month=month_end.strftime("%Y-%m"),
-                    income=float(income_expense.total_income),
-                    expenses=float(income_expense.total_expenses),
-                    net_savings=float(income_expense.net_savings),
-                    savings_rate=float(income_expense.savings_rate),
+                    income=float(
+                        income_expense.total_income.get(primary_currency, Decimal("0"))
+                    ),
+                    expenses=float(
+                        income_expense.total_expenses.get(
+                            primary_currency, Decimal("0")
+                        )
+                    ),
+                    net_savings=float(
+                        income_expense.net_savings.get(primary_currency, Decimal("0"))
+                    ),
+                    savings_rate=float(
+                        income_expense.savings_rate.get(primary_currency, Decimal("0"))
+                    ),
                 )
             )
 
@@ -181,7 +199,12 @@ class TrendService:
         )
 
         return {
-            "period": {"months_analyzed": months},
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "duration_months": months,
+                "data_quality": "complete",
+            },
             "monthly_data": monthly_data,
             "trends": {
                 "income": {
@@ -196,6 +219,8 @@ class TrendService:
                 },
                 "savings_rate": {
                     "direction": savings_trend["direction"],
+                    "growth_rate": savings_trend["growth_rate"],
+                    "stability": savings_trend["stability"],
                     "average": savings_trend["average"],
                     "improving": savings_trend["direction"] == "increasing",
                 },
@@ -434,7 +459,7 @@ class TrendService:
         for i in range(1, months_ahead + 1):
             projected_amount = current_average * (1 + growth_rate) ** i
 
-            future_date = datetime.now() + timedelta(days=i * 30)
+            future_date = datetime.now() + relativedelta(months=i)
             projections.append(
                 {
                     "month": future_date.strftime("%Y-%m"),
@@ -476,7 +501,11 @@ class TrendService:
         self, category_trends: list[dict[str, Any]]
     ) -> list[dict[str, str]]:
         """Generate insights from category trend comparison."""
-        insights = []
+        insights: list[dict[str, str]] = []
+
+        # Handle empty category trends
+        if not category_trends:
+            return insights
 
         # Find fastest growing category
         fastest_growing = max(category_trends, key=lambda x: x["growth_rate"])

@@ -100,13 +100,15 @@ async def list_accounts(
             # Convert to structured response
             accounts = [AccountResponse(**account) for account in accounts_data]
 
+            from .models.base import FilterData
+
             return AccountListResponse(
                 accounts=accounts,
                 total_count=len(accounts),
-                filters_applied={
-                    "include_hidden": include_hidden,
-                    "account_type": account_type,
-                },
+                filters_applied=FilterData(
+                    include_hidden=include_hidden,
+                    account_type=account_type,
+                ),
             )
         finally:
             await db_manager.close()
@@ -165,7 +167,7 @@ async def search_transactions(
     account_ids: list[str] | None = None,
     categories: list[str] | None = None,
     transaction_type: str | None = None,
-    limit: int = 100,
+    limit: int = 500,
 ) -> TransactionListResponse:
     """
     Search and filter transactions with natural language time periods.
@@ -180,7 +182,7 @@ async def search_transactions(
     Returns:
         List of matching transactions with metadata
     """
-    logger.info(f"🔍 Searching transactions for '{time_period}'")
+    logger.info(f"🔍 Searching transactions for '{time_period}' with limit={limit}")
 
     try:
         # Get database manager
@@ -198,13 +200,21 @@ async def search_transactions(
             # Use transaction service directly
             transaction_service = TransactionService(db_manager)
             date_range = parse_natural_language_date(time_period)
+
+            logger.info(
+                f"📅 Date range: {date_range.start_date} to {date_range.end_date}"
+            )
+            logger.info(f"🔢 Account IDs: {account_ids}, Categories: {categories}")
+
             transactions = await transaction_service.get_transactions(
                 start_date=date_range.start_date,
                 end_date=date_range.end_date,
-                account_ids=[int(aid) for aid in account_ids] if account_ids else None,
+                account_ids=account_ids,
                 categories=categories,
                 limit=limit,
             )
+
+            logger.info(f"✅ Retrieved {len(transactions)} transactions")
 
             # Format transactions data
             from .models.responses import TransactionResponse
@@ -214,7 +224,7 @@ async def search_transactions(
                     id=str(transaction.id),
                     date=transaction.date.isoformat(),
                     description=transaction.description,
-                    amount=f"{float(transaction.amount):.2f} {transaction.currency}",
+                    amount=float(transaction.amount),
                     category=transaction.category or "Uncategorized",
                     payee=transaction.payee or "Unknown",
                     account_id=str(transaction.account_id),
@@ -226,17 +236,19 @@ async def search_transactions(
                 for transaction in transactions
             ]
 
+            from .models.base import FilterData
+
             return TransactionListResponse(
                 transactions=transactions_data,
                 total_count=len(transactions_data),
                 date_range=format_date_range_for_display(date_range),
-                filters_applied={
-                    "time_period": time_period,
-                    "account_ids": account_ids,
-                    "categories": categories,
-                    "transaction_type": transaction_type,
-                    "limit": limit,
-                },
+                filters_applied=FilterData(
+                    time_period=time_period,
+                    account_ids=account_ids,
+                    categories=categories,
+                    transaction_type=transaction_type,
+                    limit=limit,
+                ),
             )
         finally:
             await db_manager.close()
@@ -267,6 +279,9 @@ async def analyze_expenses_by_category(
         db_manager = await get_db_manager()
 
         try:
+            from .models.responses import CategoryExpenseResponse
+            from .utils.date_utils import parse_natural_language_date
+
             # Use transaction service directly
             transaction_service = TransactionService(db_manager)
             date_range = parse_natural_language_date(time_period)
@@ -276,26 +291,89 @@ async def analyze_expenses_by_category(
                 group_by="category",
             )
 
-            # Format for response
-            formatted_categories = [
-                {
-                    "category_name": category.category_name,
-                    "total_amount": float(category.total_amount),
-                    "transaction_count": category.transaction_count,
-                    "percentage_of_total": category.percentage_of_total,
-                    "average_amount": float(category.average_amount),
-                }
-                for category in analysis_data["category_breakdown"][:top_categories]
-            ]
+            # Format for multi-currency response
+            formatted_categories = []
+            for i, category in enumerate(
+                analysis_data["category_breakdown"][:top_categories]
+            ):
+                # Calculate impact level based on total amounts across currencies
+                # Values are now Decimal, so we keep them as Decimal for precision
+                total_amount_for_impact = (
+                    sum(category.amounts_by_currency.values())
+                    if category.amounts_by_currency
+                    else 0
+                )
+                total_expenses_for_impact = sum(
+                    analysis_data["total_expenses_by_currency"].values()
+                )
+                percentage_for_impact = float(
+                    (total_amount_for_impact / total_expenses_for_impact * 100)
+                    if total_expenses_for_impact > 0
+                    else 0
+                )
+                if percentage_for_impact >= 20:
+                    impact = "high"
+                elif percentage_for_impact >= 10:
+                    impact = "medium"
+                else:
+                    impact = "low"
 
-            analysis_data = {
-                "analysis_period": f"{date_range.start_date.strftime('%Y-%m-%d')} to {date_range.end_date.strftime('%Y-%m-%d')}",
-                "total_expenses": float(analysis_data["total_expenses"]),
-                "currency": analysis_data["currency"],
-                "top_categories": formatted_categories,
-            }
+                # Create CategoryExpenseResponse with multi-currency data
+                # Convert dicts to CurrencyAmounts
+                from .models.currency_types import CurrencyAmounts
 
-            return ExpenseAnalysisResponse(**analysis_data)
+                formatted_category = CategoryExpenseResponse(
+                    rank=i + 1,
+                    category=category.category_name,
+                    currency_amounts=CurrencyAmounts(
+                        category.amounts_by_currency or {}
+                    ),
+                    transaction_counts_by_currency=category.transaction_counts_by_currency
+                    or {},
+                    average_amounts=CurrencyAmounts(
+                        category.average_amounts_by_currency or {}
+                    ),
+                    percentage_within_currency=category.percentage_within_currency
+                    or {},
+                    impact_level=impact,
+                )
+                formatted_categories.append(formatted_category)
+
+            from .models.currency_types import CurrencyAmounts
+            from .models.responses import AnalysisInsightsData, AnalysisSummaryData
+
+            return ExpenseAnalysisResponse(
+                analysis_period=f"{date_range.start_date.strftime('%Y-%m-%d')} to {date_range.end_date.strftime('%Y-%m-%d')}",
+                total_expenses=CurrencyAmounts(
+                    analysis_data["total_expenses_by_currency"]
+                ),
+                top_categories=formatted_categories,
+                summary=AnalysisSummaryData(
+                    total_categories=len(analysis_data["category_breakdown"]),
+                    categories_analyzed=min(
+                        top_categories, len(analysis_data["category_breakdown"])
+                    ),
+                    analysis_complete=True,
+                ),
+                insights=AnalysisInsightsData(
+                    currencies_found=list(
+                        analysis_data["total_expenses_by_currency"].keys()
+                    ),
+                    multi_currency_spending=len(
+                        analysis_data["total_expenses_by_currency"]
+                    )
+                    > 1,
+                ),
+                currencies_found=list(
+                    analysis_data["total_expenses_by_currency"].keys()
+                ),
+                primary_currency=max(
+                    analysis_data["total_expenses_by_currency"].keys(),
+                    key=lambda c: analysis_data["total_expenses_by_currency"][c],
+                )
+                if analysis_data["total_expenses_by_currency"]
+                else "USD",
+            )
         finally:
             await db_manager.close()
 
@@ -324,6 +402,8 @@ async def analyze_income_vs_expenses(
         db_manager = await get_db_manager()
 
         try:
+            from .utils.date_utils import parse_natural_language_date
+
             # Use transaction service directly
             transaction_service = TransactionService(db_manager)
             date_range = parse_natural_language_date(time_period)
@@ -337,30 +417,36 @@ async def analyze_income_vs_expenses(
                 SavingsAnalysisResponse,
             )
 
+            # Use CurrencyAmounts directly now
             financial_overview = FinancialOverviewResponse(
-                total_income=f"{float(income_expense_analysis.total_income):.2f} {income_expense_analysis.currency}",
-                total_expenses=f"{float(income_expense_analysis.total_expenses):.2f} {income_expense_analysis.currency}",
-                net_savings=f"{float(income_expense_analysis.net_savings):.2f} {income_expense_analysis.currency}",
-                savings_rate=f"{income_expense_analysis.savings_rate:.1f}%",
-                currency=income_expense_analysis.currency,
+                total_income=income_expense_analysis.total_income,
+                total_expenses=income_expense_analysis.total_expenses,
+                net_savings=income_expense_analysis.net_savings,
+                savings_rate=income_expense_analysis.savings_rate,
+                currencies_found=income_expense_analysis.currencies_found,
+                primary_currency=income_expense_analysis.primary_currency,
             )
 
+            # Determine overall status based on primary currency
+            primary_currency = income_expense_analysis.primary_currency
+            primary_savings = income_expense_analysis.net_savings.get(primary_currency)
+
             savings_analysis = SavingsAnalysisResponse(
-                status="positive"
-                if income_expense_analysis.net_savings > 0
-                else "negative",
-                monthly_savings=f"{float(income_expense_analysis.net_savings):.2f} {income_expense_analysis.currency}",
+                status="positive" if primary_savings > 0 else "negative",
+                monthly_savings=income_expense_analysis.net_savings,
                 recommendations=["Continue current savings habits"]
-                if income_expense_analysis.net_savings > 0
+                if primary_savings > 0
                 else ["Review expenses to improve savings"],
             )
 
+            from .models.responses import ExpenseBreakdownData
+
             expense_breakdown = [
-                {
-                    "category_name": cat.category_name,
-                    "total_amount": float(cat.total_amount),
-                    "percentage_of_total": cat.percentage_of_total,
-                }
+                ExpenseBreakdownData(
+                    category_name=cat.category_name,
+                    total_amount=float(cat.total_amount),
+                    percentage_of_total=float(cat.percentage_of_total),
+                )
                 for cat in income_expense_analysis.expense_breakdown[:10]
             ]
 

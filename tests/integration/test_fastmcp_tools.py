@@ -119,7 +119,8 @@ class TestFastMCPToolsIntegration:
                 "period": {
                     "start_date": "2024-01-01T00:00:00",
                     "end_date": "2024-06-30T00:00:00",
-                    "months_analyzed": 6,
+                    "duration_months": 6,
+                    "data_quality": "complete",
                 },
                 "monthly_data": [
                     {
@@ -171,7 +172,7 @@ class TestFastMCPToolsIntegration:
                 result = await analyze_spending_trends(months=6, category="Groceries")
 
             # Assert
-            assert result.period["months_analyzed"] == 6
+            assert result.period["duration_months"] == 6
             assert len(result.monthly_data) > 0
             assert result.statistics.trend_direction == "increasing"
             assert len(result.insights) > 0
@@ -194,7 +195,8 @@ class TestFastMCPToolsIntegration:
                 "period": {
                     "start_date": "2024-01-01T00:00:00",
                     "end_date": "2024-06-30T00:00:00",
-                    "months_analyzed": 6,
+                    "duration_months": 6,
+                    "data_quality": "complete",
                 },
                 "category_trends": [
                     {
@@ -251,7 +253,7 @@ class TestFastMCPToolsIntegration:
                 result = await analyze_category_trends(months=6, top_n=5)
 
             # Assert
-            assert result.period["months_analyzed"] == 6
+            assert result.period["duration_months"] == 6
             assert len(result.category_trends) == 2
             assert result.category_trends[0].category == "Groceries"
             assert result.category_trends[1].category == "Entertainment"
@@ -271,7 +273,12 @@ class TestFastMCPToolsIntegration:
             mock_get_db.return_value = mock_db
 
             mock_income_expense_data = {
-                "period": {"months_analyzed": 12},
+                "period": {
+                    "start_date": "2023-01-01T00:00:00",
+                    "end_date": "2023-12-31T00:00:00",
+                    "duration_months": 12,
+                    "data_quality": "complete",
+                },
                 "monthly_data": [
                     {
                         "month": "2024-01",
@@ -330,7 +337,7 @@ class TestFastMCPToolsIntegration:
                 result = await analyze_income_expense_trends(months=12)
 
             # Assert
-            assert result.period["months_analyzed"] == 12
+            assert result.period["duration_months"] == 12
             assert len(result.monthly_data) == 2
             assert result.trends["income"].direction == "increasing"
             assert result.trends["savings_rate"].improving is True
