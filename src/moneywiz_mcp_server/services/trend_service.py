@@ -1,11 +1,12 @@
 """Trend analysis service for financial patterns over time."""
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 import logging
 from typing import Any
 
+from dateutil.relativedelta import relativedelta
 from typing_extensions import TypedDict
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
@@ -48,7 +49,7 @@ class TrendService:
         logger.info(f"Analyzing spending trends for {months} months")
 
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=months * 30)
+        start_date = end_date - relativedelta(months=months)
 
         # Get transaction service
         transaction_service = TransactionService(self.db_manager)
@@ -101,7 +102,7 @@ class TrendService:
         logger.info(f"Analyzing category trends for top {top_n} categories")
 
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=months * 30)
+        start_date = end_date - relativedelta(months=months)
 
         # Get expense summary to identify top categories
         transaction_service = TransactionService(self.db_manager)
@@ -148,13 +149,13 @@ class TrendService:
         logger.info(f"Analyzing income vs expense trends for {months} months")
 
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=months * 30)
+        start_date = end_date - relativedelta(months=months)
         monthly_data: list[MonthlyFinancialData] = []
 
         # Get month-by-month data
         for i in range(months):
-            month_end = end_date - timedelta(days=i * 30)
-            month_start = month_end - timedelta(days=30)
+            month_end = end_date - relativedelta(months=i)
+            month_start = month_end - relativedelta(months=1)
 
             transaction_service = TransactionService(self.db_manager)
 
@@ -458,7 +459,7 @@ class TrendService:
         for i in range(1, months_ahead + 1):
             projected_amount = current_average * (1 + growth_rate) ** i
 
-            future_date = datetime.now() + timedelta(days=i * 30)
+            future_date = datetime.now() + relativedelta(months=i)
             projections.append(
                 {
                     "month": future_date.strftime("%Y-%m"),

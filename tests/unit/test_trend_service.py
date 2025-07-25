@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
+from dateutil.relativedelta import relativedelta
 import pytest
 
 from moneywiz_mcp_server.models.transaction import TransactionModel, TransactionType
@@ -26,12 +27,13 @@ class TestTrendService:
     @pytest.fixture
     def sample_transactions(self):
         """Create sample transaction data for testing."""
-        base_date = datetime.now() - timedelta(days=90)
+        # Use fixed date for deterministic testing (3 months of data)
+        base_date = datetime(2024, 1, 1)
         transactions = []
 
         # Create transactions across 3 months
         for month in range(3):
-            month_date = base_date + timedelta(days=month * 30)
+            month_date = base_date + relativedelta(months=month)
 
             # Groceries - increasing trend
             for i in range(5):
