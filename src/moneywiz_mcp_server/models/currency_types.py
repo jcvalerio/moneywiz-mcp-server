@@ -66,6 +66,20 @@ class CurrencyAmounts:
         """
         return sorted(self._amounts.keys())
 
+    def __getitem__(self, currency: str) -> Decimal:
+        """Get amount for a specific currency using subscript notation.
+
+        Args:
+            currency: Currency code to lookup
+
+        Returns:
+            Amount for the specified currency.
+
+        Raises:
+            KeyError: If currency not found.
+        """
+        return self._amounts[currency.upper()]
+
     def get(self, currency: str, default: Decimal | None = None) -> Decimal:
         """Get amount for specific currency.
 

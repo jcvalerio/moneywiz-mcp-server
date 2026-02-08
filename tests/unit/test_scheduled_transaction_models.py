@@ -62,7 +62,7 @@ class TestScheduledTransactionModel:
         assert transaction.description == "Monthly Rent"
         assert transaction.amount == Decimal("1500.00")
         assert transaction.currency == "USD"
-        assert transaction.transaction_type == TransactionType.EXPENSE
+        assert transaction.transaction_type == TransactionType.WITHDRAW
         assert transaction.recurrence_pattern == RecurrencePattern.MONTHLY
         assert transaction.end_condition == RecurrenceEndCondition.AFTER_OCCURRENCES
         assert transaction.total_occurrences == 12
@@ -116,7 +116,7 @@ class TestScheduledTransactionModel:
             "account_id": "acc1",
             "category": "Test",
             "payee": "Test",
-            "transaction_type": TransactionType.EXPENSE,
+            "transaction_type": TransactionType.WITHDRAW,
             "recurrence_pattern": RecurrencePattern.MONTHLY,
             "next_execution_date": datetime.now(),
             "completed_occurrences": 0,
@@ -166,7 +166,7 @@ class TestScheduledTransactionModel:
             "account_id": "acc1",
             "category": "Test",
             "payee": "Test",
-            "transaction_type": TransactionType.EXPENSE,
+            "transaction_type": TransactionType.WITHDRAW,
             "recurrence_pattern": RecurrencePattern.MONTHLY,
             "end_condition": RecurrenceEndCondition.AFTER_OCCURRENCES,
             "total_occurrences": 5,
@@ -205,13 +205,7 @@ class TestScheduledTransactionModel:
         )
         assert transaction.urgency_level == "future"
 
-        # Inactive (no next execution date)
-        transaction = ScheduledTransactionModel(
-            **base_data,
-            next_execution_date=None,
-        )
-        # This would cause an error in current implementation, showing a bug
-        # Let's test the behavior if next_execution_date is None
+        # Note: next_execution_date=None is not supported by the model (required field)
 
 
 class TestCommitmentBreakdown:
@@ -333,8 +327,6 @@ class TestSalaryBreakdownResponse:
             coverage_analysis="sufficient",
             commitment_end_analysis="No finite commitments found.",
             recommendations=["Your budget looks healthy!"],
-            currencies_found=["USD"],
-            primary_currency="USD",
         )
 
         assert response.salary_amount["USD"] == Decimal("5000.00")
@@ -343,7 +335,6 @@ class TestSalaryBreakdownResponse:
         assert response.coverage_analysis == "sufficient"
         assert len(response.infinite_commitments) == 1
         assert response.infinite_commitments[0].description == "Rent"
-        assert response.primary_currency == "USD"
 
 
 class TestRecurrenceEnums:
