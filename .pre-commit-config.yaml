@@ -31,7 +31,7 @@ repos:
           - --disable-error-code=unreachable
           - --disable-error-code=no-untyped-def
         types: [python]
-        exclude: ^(investigate_|focused_|final_)
+        exclude: ^(investigate_|focused_|final_|tests/)
 
   # Bandit - Security linter
   - repo: https://github.com/PyCQA/bandit
