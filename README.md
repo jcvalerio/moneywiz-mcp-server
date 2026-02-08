@@ -42,11 +42,23 @@ Ask Claude natural language questions about your finances:
 - **"What's my savings rate this year?"**
 - **"Which spending category impacts my finances the most?"**
 
-### 💡 Advanced Analytics (New!)
+### 💡 Advanced Analytics
 - **"Give me personalized savings recommendations with 25% target rate"**
 - **"Analyze my spending trends over the last 6 months"**
 - **"Show me category trends for my top 5 spending categories"**
 - **"Track my income vs expense trends for financial health"**
+
+### 📅 Scheduled Transactions & Recurring Payments (New!)
+- **"Show me all my scheduled transactions"**
+- **"What recurring payments do I have coming up?"**
+- **"Analyze how my next salary covers my commitments"**
+- **"When will my subscriptions and loans end?"**
+
+### 💵 Budget Management (New!)
+- **"Show me all my budgets with spending status"**
+- **"Am I on track with my monthly budgets?"**
+- **"Compare my budgeted amounts vs actual spending"**
+- **"Which budgets are at risk of going over?"**
 
 ## 📋 Prerequisites
 
@@ -233,16 +245,28 @@ Once configured, Claude will have access to these MoneyWiz tools:
 - **`list_accounts`** - List all accounts with balances and types
 - **`get_account`** - Get detailed account information by ID
 
+### Transaction Management
+- **`search_transactions`** - Search transactions with natural language time periods and filters
+
 ### Financial Analytics
-- **`search_transactions`** - Search transactions with natural language time periods
 - **`analyze_expenses_by_category`** - Analyze spending patterns by category
 - **`analyze_income_vs_expenses`** - Compare income vs expenses with savings analysis
 
-### Advanced Analytics (Phase 3)
+### Advanced Analytics
 - **`get_savings_recommendations`** - Personalized savings optimization with actionable tips
 - **`analyze_spending_trends`** - Statistical trend analysis with projections and insights
 - **`analyze_category_trends`** - Multi-category trend comparison and growth analysis
 - **`analyze_income_expense_trends`** - Income vs expense sustainability tracking
+
+### Scheduled Transactions & Recurring Payments
+- **`get_scheduled_transactions`** - List all scheduled and recurring transactions
+- **`analyze_salary_breakdown`** - Analyze how salary covers commitments
+- **`get_commitments_ending_timeline`** - Track when subscriptions, loans, and recurring payments end
+
+### Budget Management
+- **`get_budgets`** - List all budgets with spending status and percentages
+- **`analyze_budget_performance`** - Analyze which budgets are on track or at risk
+- **`get_budget_vs_actual`** - Compare budgeted amounts vs actual spending by category
 
 ## 🔧 Technical Details
 

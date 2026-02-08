@@ -2,14 +2,22 @@
 """MoneyWiz MCP Server - Modern FastMCP implementation."""
 # mypy: disable-error-code=misc
 
+from collections import defaultdict
 import logging
 from pathlib import Path
 import sys
+from typing import Any
 
 from mcp.server import FastMCP
 
 from .config import Config
 from .database.connection import DatabaseManager
+from .models.budget import (
+    BudgetAnalysisResponse,
+    BudgetListResponse,
+    BudgetResponse,
+    BudgetVsActualResponse,
+)
 from .models.responses import (
     AccountDetailResponse,
     AccountListResponse,
@@ -24,7 +32,15 @@ from .models.savings_responses import (
     SavingsOptimizationResponse,
     SpendingTrendResponse,
 )
+from .models.scheduled_transaction import (
+    CommitmentTimelineResponse,
+    SalaryBreakdownResponse,
+    ScheduledTransactionListResponse,
+    ScheduledTransactionResponse,
+)
+from .services.budget_service import BudgetService
 from .services.savings_service import SavingsService
+from .services.scheduled_transaction_service import ScheduledTransactionService
 from .services.transaction_service import TransactionService
 from .services.trend_service import TrendService
 
@@ -636,6 +652,459 @@ async def analyze_income_expense_trends(
     except Exception as e:
         logger.error(f"❌ Failed to analyze income vs expense trends: {e}")
         raise RuntimeError(f"Failed to analyze income vs expense trends: {e!s}") from e
+
+
+@mcp.tool()
+async def get_scheduled_transactions(
+    time_period: str = "next 6 months",
+    account_ids: list[str] | None = None,
+    categories: list[str] | None = None,
+    commitment_types: list[str] | None = None,
+    include_inactive: bool = False,
+    limit: int = 50,
+) -> ScheduledTransactionListResponse:
+    """
+    Get scheduled transactions with occurrence tracking details.
+
+    Args:
+        time_period: Time period to analyze (e.g., 'next 6 months', 'next year')
+        account_ids: Optional list of account IDs to filter by
+        categories: Optional list of category names to filter by
+        commitment_types: Filter by commitment type: finite, infinite, ending_soon
+        include_inactive: Include inactive scheduled transactions
+        limit: Maximum number of transactions to return (1-100)
+
+    Returns:
+        List of scheduled transactions with occurrence details
+    """
+    logger.info(f"📅 Getting scheduled transactions for '{time_period}'")
+
+    try:
+        # Get database manager
+        db_manager = await get_db_manager()
+
+        try:
+            # Initialize scheduled transaction service
+            scheduled_service = ScheduledTransactionService(db_manager)
+
+            # Get scheduled transactions
+            scheduled_transactions = await scheduled_service.get_scheduled_transactions(
+                account_ids=account_ids,
+                categories=categories,
+                commitment_types=commitment_types,
+                include_inactive=include_inactive,
+                limit=limit,
+            )
+
+            # Convert to response format
+            scheduled_responses = []
+            for transaction in scheduled_transactions:
+                response = ScheduledTransactionResponse(
+                    id=transaction.id,
+                    description=transaction.description,
+                    amount=float(transaction.amount),
+                    currency=transaction.currency,
+                    category=transaction.category,
+                    payee=transaction.payee,
+                    account_id=transaction.account_id,
+                    recurrence_pattern=transaction.recurrence_pattern.value,
+                    next_execution_date=transaction.next_execution_date.isoformat(),
+                    transaction_type=transaction.transaction_type.value,
+                    end_condition=transaction.end_condition.value,
+                    total_occurrences=transaction.total_occurrences,
+                    completed_occurrences=transaction.completed_occurrences,
+                    remaining_occurrences=transaction.remaining_occurrences,
+                    final_execution_date=transaction.final_execution_date.isoformat()
+                    if transaction.final_execution_date
+                    else None,
+                    is_active=transaction.is_active,
+                    commitment_type=transaction.commitment_type,
+                    urgency_level=transaction.urgency_level,
+                )
+                scheduled_responses.append(response)
+
+            # Calculate summary statistics
+            finite_count = sum(
+                1 for t in scheduled_transactions if t.commitment_type == "finite"
+            )
+            infinite_count = sum(
+                1 for t in scheduled_transactions if t.commitment_type == "infinite"
+            )
+            ending_soon_count = sum(
+                1 for t in scheduled_transactions if t.commitment_type == "ending_soon"
+            )
+
+            summary = {
+                "finite_commitments": finite_count,
+                "infinite_commitments": infinite_count,
+                "ending_soon_commitments": ending_soon_count,
+                "total_active": sum(1 for t in scheduled_transactions if t.is_active),
+            }
+
+            return ScheduledTransactionListResponse(
+                scheduled_transactions=scheduled_responses,
+                total_count=len(scheduled_responses),
+                filters_applied={
+                    "time_period": time_period,
+                    "account_ids": account_ids,
+                    "categories": categories,
+                    "commitment_types": commitment_types,
+                    "include_inactive": include_inactive,
+                    "limit": limit,
+                },
+                summary=summary,
+            )
+
+        finally:
+            await db_manager.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to get scheduled transactions: {e}")
+        raise RuntimeError(f"Failed to get scheduled transactions: {e!s}") from e
+
+
+@mcp.tool()
+async def analyze_salary_breakdown(
+    next_salary_date: str,
+    salary_amount: float | None = None,
+    planning_horizon_months: int = 3,
+) -> SalaryBreakdownResponse:
+    """
+    Analyze how next salary covers upcoming scheduled commitments with occurrence tracking.
+
+    Args:
+        next_salary_date: Date of next salary payment (YYYY-MM-DD)
+        salary_amount: Optional salary amount (estimated if not provided)
+        planning_horizon_months: How far ahead to analyze (1-12 months)
+
+    Returns:
+        Detailed breakdown showing how salary covers commitments with occurrence details
+    """
+    logger.info(f"💰 Analyzing salary breakdown for {next_salary_date}")
+
+    try:
+        # Get database manager
+        db_manager = await get_db_manager()
+
+        try:
+            from datetime import datetime
+            from decimal import Decimal
+
+            # Parse salary date
+            salary_date = datetime.fromisoformat(next_salary_date)
+
+            # Initialize scheduled transaction service
+            scheduled_service = ScheduledTransactionService(db_manager)
+
+            # Convert salary amount to Decimal if provided
+            salary_decimal = None
+            if salary_amount is not None:
+                salary_decimal = Decimal(str(salary_amount))
+
+            # Calculate salary breakdown
+            breakdown_data = await scheduled_service.calculate_salary_breakdown(
+                next_salary_date=salary_date,
+                salary_amount=salary_decimal,
+                planning_horizon_months=planning_horizon_months,
+            )
+
+            return SalaryBreakdownResponse(**breakdown_data)
+
+        finally:
+            await db_manager.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to analyze salary breakdown: {e}")
+        raise RuntimeError(f"Failed to analyze salary breakdown: {e!s}") from e
+
+
+@mcp.tool()
+async def get_commitments_ending_timeline(
+    months_ahead: int = 12,
+) -> CommitmentTimelineResponse:
+    """
+    Get timeline showing when finite commitments will end and cash flow impact.
+
+    Args:
+        months_ahead: How many months ahead to analyze (3-24)
+
+    Returns:
+        Timeline of commitment endings with cash flow impact analysis
+    """
+    logger.info(f"📅 Getting commitment ending timeline for {months_ahead} months")
+
+    try:
+        # Get database manager
+        db_manager = await get_db_manager()
+
+        try:
+            from collections import defaultdict
+            from datetime import datetime, timedelta
+
+            # Initialize scheduled transaction service
+            scheduled_service = ScheduledTransactionService(db_manager)
+
+            # Get all scheduled transactions
+            scheduled_transactions = (
+                await scheduled_service.get_scheduled_transactions()
+            )
+
+            # Filter for finite commitments
+            finite_commitments = [
+                t
+                for t in scheduled_transactions
+                if t.commitment_type in ["finite", "ending_soon"]
+                and t.final_execution_date
+            ]
+
+            # Group by ending month
+            ending_by_month: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            cash_flow_changes: dict[str, dict[str, float | int]] = defaultdict(
+                lambda: {"amount": 0.0, "count": 0}
+            )
+
+            end_date = datetime.now() + timedelta(days=months_ahead * 30)
+
+            for commitment in finite_commitments:
+                if (
+                    commitment.final_execution_date
+                    and commitment.final_execution_date <= end_date
+                ):
+                    ending_month = commitment.final_execution_date.strftime("%Y-%m")
+                    ending_by_month[ending_month].append(
+                        {
+                            "description": commitment.description,
+                            "amount": float(commitment.amount),
+                            "currency": commitment.currency,
+                            "final_date": commitment.final_execution_date.isoformat(),
+                            "remaining_payments": commitment.remaining_occurrences,
+                        }
+                    )
+
+                    # Add to cash flow changes
+                    cash_flow_changes[ending_month]["amount"] += float(
+                        commitment.amount
+                    )
+                    cash_flow_changes[ending_month]["count"] += 1
+
+            # Convert to response format
+            ending_commitments = []
+            for month, commitments in ending_by_month.items():
+                ending_commitments.append(
+                    {
+                        "month": month,
+                        "commitments": commitments,
+                        "total_monthly_relief": sum(c["amount"] for c in commitments),
+                        "commitment_count": len(commitments),
+                    }
+                )
+
+            cash_flow_list = []
+            for month, changes in cash_flow_changes.items():
+                cash_flow_list.append(
+                    {
+                        "month": month,
+                        "monthly_relief": changes["amount"],
+                        "commitments_ending": changes["count"],
+                    }
+                )
+
+            # Calculate total monthly relief
+            total_relief = sum(
+                changes["amount"] for changes in cash_flow_changes.values()
+            )
+            total_relief_by_currency = {"USD": total_relief}  # Simplified for now
+
+            # Generate recommendations
+            recommendations = []
+            if total_relief > 0:
+                recommendations.append(
+                    f"💰 You'll free up ${total_relief:.2f}/month as {len(finite_commitments)} commitments end"
+                )
+            if len(ending_by_month) > 0:
+                recommendations.append(
+                    f"📅 Commitments ending across {len(ending_by_month)} different months"
+                )
+
+            from .models.currency_types import CurrencyAmounts
+
+            return CommitmentTimelineResponse(
+                timeline_period=f"next {months_ahead} months",
+                ending_commitments=ending_commitments,
+                cash_flow_changes=cash_flow_list,
+                total_monthly_relief=CurrencyAmounts(total_relief_by_currency),
+                recommendations=recommendations,
+            )
+
+        finally:
+            await db_manager.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to get commitment timeline: {e}")
+        raise RuntimeError(f"Failed to get commitment timeline: {e!s}") from e
+
+
+@mcp.tool()
+async def get_budgets(
+    categories: list[str] | None = None,
+    period: str | None = None,
+    include_inactive: bool = False,
+    limit: int = 50,
+) -> BudgetListResponse:
+    """
+    Get all budgets with current spending status.
+
+    Args:
+        categories: Optional list of category names to filter by
+        period: Optional period filter (daily, weekly, monthly, yearly)
+        include_inactive: Include inactive budgets
+        limit: Maximum number of budgets to return (1-100)
+
+    Returns:
+        List of budgets with spending status and category breakdown
+    """
+    logger.info(f"📊 Getting budgets (categories={categories}, period={period})")
+
+    try:
+        db_manager = await get_db_manager()
+
+        try:
+            budget_service = BudgetService(db_manager)
+            budgets = await budget_service.get_budgets(
+                categories=categories,
+                period=period,
+                include_inactive=include_inactive,
+                limit=limit,
+            )
+
+            # Convert to response format
+            budget_responses = []
+            for budget in budgets:
+                response = BudgetResponse(
+                    id=budget.id,
+                    name=budget.name,
+                    categories=budget.categories,
+                    budget_amount=float(budget.budget_amount),
+                    currency=budget.currency,
+                    period=budget.period.value,
+                    period_start=budget.period_start.isoformat()
+                    if budget.period_start
+                    else None,
+                    period_end=budget.period_end.isoformat()
+                    if budget.period_end
+                    else None,
+                    spent_amount=float(budget.spent_amount),
+                    remaining_amount=float(budget.remaining_amount),
+                    percentage_used=budget.percentage_used,
+                    status=budget.status.value,
+                    is_repeatable=budget.is_repeatable,
+                    is_active=budget.is_active,
+                    linked_accounts=budget.linked_accounts,
+                    transaction_count=budget.transaction_count,
+                )
+                budget_responses.append(response)
+
+            # Calculate summary
+            on_track = sum(1 for b in budgets if b.status.value == "on_track")
+            at_risk = sum(1 for b in budgets if b.status.value == "at_risk")
+            over_budget = sum(1 for b in budgets if b.status.value == "over_budget")
+
+            summary = {
+                "on_track": on_track,
+                "at_risk": at_risk,
+                "over_budget": over_budget,
+                "total_active": len([b for b in budgets if b.is_active]),
+            }
+
+            return BudgetListResponse(
+                budgets=budget_responses,
+                total_count=len(budget_responses),
+                filters_applied={
+                    "categories": categories,
+                    "period": period,
+                    "include_inactive": include_inactive,
+                    "limit": limit,
+                },
+                summary=summary,
+            )
+
+        finally:
+            await db_manager.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to get budgets: {e}")
+        raise RuntimeError(f"Failed to get budgets: {e!s}") from e
+
+
+@mcp.tool()
+async def analyze_budget_performance(
+    time_period: str = "current_month",
+) -> BudgetAnalysisResponse:
+    """
+    Analyze overall budget performance and get recommendations.
+
+    Args:
+        time_period: Period to analyze (current_month, last_month, etc.)
+
+    Returns:
+        Comprehensive budget analysis with spending breakdown and recommendations
+    """
+    logger.info(f"📊 Analyzing budget performance for {time_period}")
+
+    try:
+        db_manager = await get_db_manager()
+
+        try:
+            budget_service = BudgetService(db_manager)
+            analysis_data = await budget_service.get_budget_analysis(
+                time_period=time_period
+            )
+
+            return BudgetAnalysisResponse(**analysis_data)
+
+        finally:
+            await db_manager.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to analyze budget performance: {e}")
+        raise RuntimeError(f"Failed to analyze budget performance: {e!s}") from e
+
+
+@mcp.tool()
+async def get_budget_vs_actual(
+    category: str | None = None,
+    period: str = "current_month",
+) -> BudgetVsActualResponse:
+    """
+    Compare budgeted amounts against actual spending.
+
+    Args:
+        category: Optional specific category to analyze
+        period: Period to analyze (current_month, last_month, etc.)
+
+    Returns:
+        Budget vs actual comparison with variance analysis
+    """
+    logger.info(f"📊 Getting budget vs actual for {period}")
+
+    try:
+        db_manager = await get_db_manager()
+
+        try:
+            budget_service = BudgetService(db_manager)
+            comparison_data = await budget_service.get_budget_vs_actual(
+                category=category,
+                period=period,
+            )
+
+            return BudgetVsActualResponse(**comparison_data)
+
+        finally:
+            await db_manager.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to get budget vs actual: {e}")
+        raise RuntimeError(f"Failed to get budget vs actual: {e!s}") from e
 
 
 def main() -> int:

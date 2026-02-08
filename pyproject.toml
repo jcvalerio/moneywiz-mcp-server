@@ -227,12 +227,18 @@ strict_equality = true
 show_error_codes = true
 show_column_numbers = true
 pretty = true
+mypy_path = "src"
 
 [[tool.mypy.overrides]]
 module = [
     "moneywiz_api.*",
     "mcp.*",
     "aiosqlite.*",
+    "investigate_scheduled_transactions",
+    "investigate_budgets",
+    "investigate_budgets_deep",
+    "focused_scheduled_investigation",
+    "final_scheduled_investigation",
 ]
 ignore_missing_imports = true
 
