@@ -227,7 +227,7 @@ strict_equality = true
 show_error_codes = true
 show_column_numbers = true
 pretty = true
-explicit_package_bases = true
+mypy_path = "src"
 
 [[tool.mypy.overrides]]
 module = [
