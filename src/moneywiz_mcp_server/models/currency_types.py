@@ -66,6 +66,19 @@ class CurrencyAmounts:
         """
         return sorted(self._amounts.keys())
 
+    def __contains__(self, currency: object) -> bool:
+        """Check if a currency exists in this container.
+
+        Args:
+            currency: Currency code to check
+
+        Returns:
+            True if the currency is present.
+        """
+        if not isinstance(currency, str):
+            return False
+        return currency.upper() in self._amounts
+
     def __getitem__(self, currency: str) -> Decimal:
         """Get amount for a specific currency using subscript notation.
 

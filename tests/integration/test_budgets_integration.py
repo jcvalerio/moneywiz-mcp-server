@@ -13,6 +13,8 @@ from moneywiz_mcp_server.main import (
     get_budgets,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def mock_config():

@@ -15,6 +15,8 @@ from moneywiz_mcp_server.main import (
     get_scheduled_transactions,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def mock_config():
