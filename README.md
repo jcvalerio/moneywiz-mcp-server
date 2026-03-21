@@ -150,7 +150,7 @@ Claude Desktop does not source your shell, so bare commands like `python` or `uv
   "mcpServers": {
     "moneywiz": {
       "command": "/ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python",
-      "args": ["-m", "moneywiz_mcp_server.main"],
+      "args": ["-m", "moneywiz_mcp_server"],
       "cwd": "/ABSOLUTE/PATH/TO/moneywiz-mcp-server"
     }
   }
