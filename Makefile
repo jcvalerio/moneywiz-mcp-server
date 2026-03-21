@@ -158,7 +158,7 @@ quick-check:  ## Quick code quality check (format + lint + type)
 # MCP Server specific
 run-server:  ## Run MCP server locally
 	@echo "🖥️ Starting MoneyWiz MCP Server..."
-	uv run python -m moneywiz_mcp_server.main
+	uv run python -m moneywiz_mcp_server
 
 test-mcp:  ## Test MCP server functionality
 	@echo "🧪 Testing MCP server..."

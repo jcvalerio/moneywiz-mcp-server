@@ -195,7 +195,7 @@ asyncio.run(test())
 ### Test MCP Server
 ```bash
 # Start the server (should connect via stdio)
-uv run python -m moneywiz_mcp_server.main
+uv run python -m moneywiz_mcp_server
 ```
 
 ## 🛡️ Available Tools
@@ -256,7 +256,7 @@ ls -la "/path/to/your/MoneyWiz.sqlite"
 uv run python -c "from moneywiz_mcp_server.config import Config; print(Config.from_env().database_path)"
 
 # Check server logs
-uv run python -m moneywiz_mcp_server.main 2>&1 | head -20
+uv run python -m moneywiz_mcp_server 2>&1 | head -20
 ```
 
 ### Claude Desktop Connection Issues
@@ -273,7 +273,7 @@ uv run python -m moneywiz_mcp_server.main 2>&1 | head -20
 
 3. **Test the exact command Claude Desktop will run**:
    ```bash
-   /ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python -m moneywiz_mcp_server.main
+   /ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python -m moneywiz_mcp_server
    ```
 
 4. **Check file permissions**:
