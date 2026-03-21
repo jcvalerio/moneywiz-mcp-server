@@ -13,25 +13,25 @@ echo
 cd "$(dirname "$0")/.."
 
 echo "📋 Step 1: Installing dependencies"
-pip install -e ".[dev]" > /dev/null 2>&1
+uv sync --all-extras > /dev/null 2>&1
 echo "✅ Dependencies installed"
 echo
 
 echo "🔍 Step 2: Ruff Linter (exact CI command)"
 echo "Running: ruff check . --output-format=github"
-ruff check . --output-format=github
+uv run ruff check . --output-format=github
 echo "✅ Ruff linting passed"
 echo
 
 echo "✨ Step 3: Ruff Formatter (exact CI command)"
 echo "Running: ruff format --check ."
-ruff format --check .
+uv run ruff format --check .
 echo "✅ Ruff formatting passed"
 echo
 
 echo "🔒 Step 4: Mypy Type Checking (non-blocking, same as CI)"
 echo "Running: mypy src/"
-if mypy src/; then
+if uv run mypy src/; then
     echo "✅ Mypy type checking passed"
 else
     echo "⚠️  Mypy has warnings (non-blocking, same as CI)"
@@ -40,7 +40,7 @@ echo
 
 echo "🛡️  Step 5: Bandit Security Check"
 echo "Running: bandit -r src/"
-if bandit -r src/ > /dev/null 2>&1; then
+if uv run bandit -r src/ > /dev/null 2>&1; then
     echo "✅ Bandit security check passed"
 else
     echo "⚠️  Bandit has security warnings"
@@ -49,7 +49,7 @@ echo
 
 echo "🧪 Step 6: Unit Tests (excluding integration)"
 echo "Running: pytest tests/unit/ -m 'not integration'"
-pytest tests/unit/ -m "not integration" --tb=short
+uv run pytest tests/unit/ -m "not integration" --tb=short
 echo "✅ Unit tests passed"
 echo
 

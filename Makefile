@@ -1,5 +1,5 @@
 # MoneyWiz MCP Server - Development Makefile
-# Modern Python development workflow with Ruff, Black, Mypy, and more
+# Modern Python development workflow with uv, Ruff, Mypy, and more
 
 .PHONY: help install install-dev clean lint format type-check security test test-cov test-integration docs pre-commit setup-pre-commit ci-local build
 
@@ -11,64 +11,62 @@ help:  ## Show this help
 
 # Installation
 install:  ## Install package for production
-	pip install -e .
+	uv sync
 
 install-dev:  ## Install package with development dependencies
-	pip install -e ".[dev,test]"
+	uv sync --all-extras
 
 # Code Quality
 lint:  ## Run all linting checks
 	@echo "🔍 Running Ruff linter..."
-	ruff check .
+	uv run ruff check .
 	@echo "✅ Linting complete!"
 
 lint-fix:  ## Run linting with auto-fix
 	@echo "🔧 Running Ruff with auto-fix..."
-	ruff check --fix .
+	uv run ruff check --fix .
 	@echo "✅ Auto-fix complete!"
 
-format:  ## Format code with Ruff and Black
+format:  ## Format code with Ruff
 	@echo "🎨 Formatting code..."
-	ruff format .
-	black .
+	uv run ruff format .
 	@echo "✅ Formatting complete!"
 
 format-check:  ## Check code formatting without making changes
 	@echo "🔍 Checking code formatting..."
-	ruff format --check .
-	black --check .
+	uv run ruff format --check .
 	@echo "✅ Format check complete!"
 
 type-check:  ## Run static type checking with Mypy
 	@echo "🔬 Running type checks..."
-	mypy src/
+	uv run mypy src/
 	@echo "✅ Type checking complete!"
 
 security:  ## Run security checks
 	@echo "🛡️ Running security checks..."
-	bandit -r src/
-	safety check
+	uv run bandit -r src/
+	uv run safety check
 	@echo "✅ Security checks complete!"
 
 # Testing
 test:  ## Run tests
 	@echo "🧪 Running tests..."
-	pytest
+	uv run pytest
 	@echo "✅ Tests complete!"
 
 test-cov:  ## Run tests with coverage report
 	@echo "🧪 Running tests with coverage..."
-	pytest --cov=moneywiz_mcp_server --cov-report=term-missing --cov-report=html
+	uv run pytest --cov=moneywiz_mcp_server --cov-report=term-missing --cov-report=html
 	@echo "📊 Coverage report generated in htmlcov/"
 
 test-integration:  ## Run integration tests only
 	@echo "🔗 Running integration tests..."
-	pytest tests/integration/ -v
+	uv run pytest tests/integration/ -v
 	@echo "✅ Integration tests complete!"
 
 test-unit:  ## Run unit tests only
 	@echo "🔬 Running unit tests..."
-	pytest tests/unit/ -v
+	uv run pytest tests/unit/ -v
 	@echo "✅ Unit tests complete!"
 
 # Documentation
@@ -92,13 +90,13 @@ docs-serve:  ## Serve documentation locally
 # Pre-commit
 setup-pre-commit:  ## Install pre-commit hooks
 	@echo "🪝 Installing pre-commit hooks..."
-	pre-commit install
-	pre-commit install --hook-type commit-msg
+	uv run pre-commit install
+	uv run pre-commit install --hook-type commit-msg
 	@echo "✅ Pre-commit hooks installed!"
 
 pre-commit:  ## Run pre-commit hooks on all files
 	@echo "🔄 Running pre-commit hooks..."
-	pre-commit run --all-files
+	uv run pre-commit run --all-files
 	@echo "✅ Pre-commit complete!"
 
 # CI/CD Simulation
@@ -121,12 +119,12 @@ ci-local:  ## Run complete CI pipeline locally
 # Package Management
 build:  ## Build package distribution
 	@echo "📦 Building package..."
-	python -m build
+	uv build
 	@echo "✅ Package built in dist/"
 
 build-check:  ## Check built package
 	@echo "🔍 Checking package..."
-	twine check dist/*
+	uvx twine check dist/*
 	@echo "✅ Package check complete!"
 
 clean:  ## Clean build artifacts and cache
@@ -160,8 +158,8 @@ quick-check:  ## Quick code quality check (format + lint + type)
 # MCP Server specific
 run-server:  ## Run MCP server locally
 	@echo "🖥️ Starting MoneyWiz MCP Server..."
-	python -m moneywiz_mcp_server.main
+	uv run python -m moneywiz_mcp_server.main
 
 test-mcp:  ## Test MCP server functionality
 	@echo "🧪 Testing MCP server..."
-	python test_mcp_minimal.py
+	uv run python test_mcp_minimal.py

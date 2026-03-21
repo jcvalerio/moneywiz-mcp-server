@@ -4,29 +4,26 @@ A Model Context Protocol (MCP) server that provides AI assistants like Claude wi
 
 ![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green)
 ![Platform: macOS](https://img.shields.io/badge/Platform-macOS-blue)
-![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Python: 3.12](https://img.shields.io/badge/Python-3.12-blue)
 
-## 🚀 Quick Start (30 seconds)
+## 🚀 Quick Start
 
 ```bash
-# 1. Install the server
-pip install git+https://github.com/jcvalerio/moneywiz-mcp-server.git
+# 1. Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Set up configuration
-python setup_env.py
+# 2. Clone and install
+git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
+cd moneywiz-mcp-server
+uv sync --all-extras
 
-# 3. Add to Claude Desktop config (~/.../Claude/claude_desktop_config.json)
-{
-  "mcpServers": {
-    "moneywiz": {
-      "command": "python",
-      "args": ["-m", "moneywiz_mcp_server"]
-    }
-  }
-}
+# 3. Find your MoneyWiz database
+uv run python setup_env.py
 
-# 4. Restart Claude Desktop and ask: "Show me my MoneyWiz accounts"
+# 4. Add to Claude Desktop config and restart
 ```
+
+See [Claude Desktop Setup](#️-claude-desktop-setup) below for the exact JSON configuration.
 
 ## ✨ What You Can Do
 
@@ -48,13 +45,13 @@ Ask Claude natural language questions about your finances:
 - **"Show me category trends for my top 5 spending categories"**
 - **"Track my income vs expense trends for financial health"**
 
-### 📅 Scheduled Transactions & Recurring Payments (New!)
+### 📅 Scheduled Transactions & Recurring Payments
 - **"Show me all my scheduled transactions"**
 - **"What recurring payments do I have coming up?"**
 - **"Analyze how my next salary covers my commitments"**
 - **"When will my subscriptions and loans end?"**
 
-### 💵 Budget Management (New!)
+### 💵 Budget Management
 - **"Show me all my budgets with spending status"**
 - **"Am I on track with my monthly budgets?"**
 - **"Compare my budgeted amounts vs actual spending"**
@@ -64,33 +61,26 @@ Ask Claude natural language questions about your finances:
 
 - **macOS**: MoneyWiz MCP Server only supports macOS (MoneyWiz is only available on Apple platforms)
 - **MoneyWiz App**: Install and set up MoneyWiz with some financial data
-- **Python 3.10+**: Ensure Python is installed
+- **uv**: Install the uv package manager — it manages Python automatically, no separate Python install required
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 - **Claude Desktop**: Install Claude Desktop application
 
-## 🛠️ Installation
+> **No system Python required.** uv downloads and manages Python 3.12 automatically when you run `uv sync`.
 
-### Option 1: Install from Source (Recommended)
+## 🛠️ Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
 cd moneywiz-mcp-server
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# Install with dependencies
-pip install -e ".[dev,test]"
+# Install all dependencies (creates .venv with Python 3.12 automatically)
+uv sync --all-extras
 
 # Run setup to find your MoneyWiz database
-python setup_env.py
-```
-
-### Option 2: Install from PyPI (When Available)
-
-```bash
-pip install moneywiz-mcp-server
+uv run python setup_env.py
 ```
 
 ## ⚙️ Configuration
@@ -98,8 +88,7 @@ pip install moneywiz-mcp-server
 ### Automatic Setup (Recommended)
 
 ```bash
-# Run the setup script to automatically find and configure your MoneyWiz database
-python setup_env.py
+uv run python setup_env.py
 ```
 
 The setup script will:
@@ -148,56 +137,35 @@ find ~ -name "*.sqlite*" 2>/dev/null | grep -i moneywiz
 
 ### 1. Find Your Claude Desktop Config
 
-The configuration file is located at:
 ```bash
 ~/Library/Application Support/Claude/claude_desktop_config.json
 ```
 
 ### 2. Add MCP Server Configuration
 
-Choose one of these configurations:
+Claude Desktop does not source your shell, so bare commands like `python` or `uv` won't be found. You must use the **absolute path** to the Python binary inside `.venv`.
 
-#### Standard Installation
 ```json
 {
   "mcpServers": {
     "moneywiz": {
-      "command": "python",
-      "args": ["-m", "moneywiz_mcp_server"]
-    }
-  }
-}
-```
-
-#### Virtual Environment (FastMCP Best Practice)
-```json
-{
-  "mcpServers": {
-    "moneywiz": {
-      "command": "/path/to/your/venv/bin/python",
+      "command": "/ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python",
       "args": ["-m", "moneywiz_mcp_server.main"],
-      "cwd": "/path/to/your/moneywiz-mcp-server"
+      "cwd": "/ABSOLUTE/PATH/TO/moneywiz-mcp-server"
     }
   }
 }
 ```
 
-#### With Custom Database Path (FastMCP Best Practice)
-```json
-{
-  "mcpServers": {
-    "moneywiz": {
-      "command": "python",
-      "args": ["-m", "moneywiz_mcp_server.main"],
-      "cwd": "/path/to/your/moneywiz-mcp-server",
-      "env": {
-        "MONEYWIZ_DB_PATH": "/path/to/your/MoneyWiz.sqlite",
-        "MONEYWIZ_READ_ONLY": "true"
-      }
-    }
-  }
-}
+**Get your absolute path:**
+```bash
+echo "$(pwd)/.venv/bin/python"
+# Example output: /Users/yourname/dev/moneywiz-mcp-server/.venv/bin/python
 ```
+
+The `.venv/bin/python` binary is self-contained — it does **not** require Python to be installed globally on your Mac.
+
+The `cwd` field is required so the server can locate the `.env` file with your database path.
 
 ### 3. Restart Claude Desktop
 
@@ -207,7 +175,7 @@ Completely quit and reopen Claude Desktop for changes to take effect.
 
 ### Test Database Connection
 ```bash
-python -c "
+uv run python -c "
 from moneywiz_mcp_server.config import Config
 from moneywiz_mcp_server.database.connection import DatabaseManager
 import asyncio
@@ -227,15 +195,8 @@ asyncio.run(test())
 ### Test MCP Server
 ```bash
 # Start the server (should connect via stdio)
-python -m moneywiz_mcp_server
+uv run python -m moneywiz_mcp_server.main
 ```
-
-### Test with Claude Desktop
-
-Try these queries in Claude Desktop:
-- "Show me all my MoneyWiz accounts"
-- "Analyze my expenses for the last 3 months"
-- "What's my current savings rate?"
 
 ## 🛡️ Available Tools
 
@@ -292,35 +253,41 @@ Once configured, Claude will have access to these MoneyWiz tools:
 ls -la "/path/to/your/MoneyWiz.sqlite"
 
 # Test configuration
-python -c "from moneywiz_mcp_server.config import Config; print(Config.from_env().database_path)"
+uv run python -c "from moneywiz_mcp_server.config import Config; print(Config.from_env().database_path)"
 
 # Check server logs
-python -m moneywiz_mcp_server 2>&1 | head -20
+uv run python -m moneywiz_mcp_server.main 2>&1 | head -20
 ```
 
 ### Claude Desktop Connection Issues
 
 1. **Validate JSON syntax**:
    ```bash
-   python -c "import json; print(json.load(open('claude_desktop_config.json')))"
+   python3 -c "import json; print(json.load(open('$HOME/Library/Application Support/Claude/claude_desktop_config.json')))"
    ```
 
-2. **Test exact command**:
+2. **Verify the .venv Python path exists**:
    ```bash
-   python -m moneywiz_mcp_server
+   ls -la /ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python
    ```
 
-3. **Check file permissions**:
+3. **Test the exact command Claude Desktop will run**:
+   ```bash
+   /ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python -m moneywiz_mcp_server.main
+   ```
+
+4. **Check file permissions**:
    ```bash
    ls -la "/path/to/your/MoneyWiz.sqlite"
    ```
 
 ### Common Issues
 
-- **"Database not found"**: Check `MONEYWIZ_DB_PATH` and use absolute paths
+- **"Database not found"**: Check `MONEYWIZ_DB_PATH` in `.env` and use absolute paths
 - **"Permission denied"**: Ensure file permissions and MoneyWiz isn't locking the file
-- **"MCP server not responding"**: Restart Claude Desktop and check JSON syntax
+- **"MCP server not responding"**: Restart Claude Desktop and verify the `.venv/bin/python` path is correct
 - **"No data found"**: Ensure MoneyWiz has transaction data and is the correct database
+- **"command not found"**: Make sure you're using the absolute `.venv/bin/python` path, not bare `python`
 
 ## 🔒 Security
 
@@ -336,13 +303,15 @@ python -m moneywiz_mcp_server 2>&1 | head -20
 moneywiz-mcp-server/
 ├── README.md                    # This file
 ├── pyproject.toml              # Package configuration
+├── uv.lock                     # Locked dependency versions
+├── .python-version             # Python version pin (3.12.7)
 ├── setup_env.py               # Setup helper script
 ├── examples/                   # Configuration examples
 │   ├── claude_desktop_config.json
 │   ├── claude_desktop_config_venv.json
 │   └── claude_code_config.json
 ├── src/moneywiz_mcp_server/    # Main package
-│   ├── server.py               # MCP server
+│   ├── main.py                 # FastMCP server entry point
 │   ├── config.py               # Configuration
 │   ├── database/               # Database connection
 │   ├── tools/                  # MCP tools
@@ -357,26 +326,21 @@ moneywiz-mcp-server/
 ```bash
 git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
 cd moneywiz-mcp-server
-python -m venv venv
-source venv/bin/activate
-pip install -e ".[dev,test]"
-python setup_env.py
+uv sync --all-extras
+uv run python setup_env.py
 ```
 
 ### Run Tests
 ```bash
-python -m pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 ### Code Quality
 ```bash
-# Linting
-flake8 src/
-mypy src/
-
-# Formatting
-black src/
-isort src/
+uv run ruff check .        # Linting
+uv run ruff format .       # Formatting
+uv run mypy src/           # Type checking
+./scripts/check-ci.sh     # Full CI simulation
 ```
 
 ## 📄 License
@@ -392,9 +356,8 @@ MIT License - see LICENSE file for details.
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+3. Make your changes with tests
+4. Submit a pull request
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
