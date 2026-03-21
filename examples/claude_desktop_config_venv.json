@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "moneywiz": {
-      "command": "/path/to/your/venv/bin/python",
+      "command": "/path/to/your/.venv/bin/python",
       "args": ["-m", "moneywiz_mcp_server"],
       "env": {
         "MONEYWIZ_DB_PATH": "/Users/username/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite",

@@ -39,15 +39,13 @@ git checkout -b docs/update-description
 ### 3. Make Your Changes
 ```bash
 # Set up development environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e ".[dev,test]"
+uv sync --all-extras
 
 # Run setup
 python setup_env.py
 
 # Make your changes and test them
-python -m pytest tests/
+uv run pytest tests/
 ```
 
 ### 4. Commit Your Changes
@@ -88,7 +86,7 @@ git push origin feature/your-feature-name
 - [ ] Update documentation if needed
 - [ ] Add tests for new functionality
 - [ ] Ensure all tests pass: `python -m pytest tests/`
-- [ ] Run linting: `flake8 src/`
+- [ ] Run linting: `uv run ruff check .`
 - [ ] Update README.md if adding new features
 
 ### PR Guidelines
@@ -127,13 +125,13 @@ Brief description of changes
 ### Running Tests
 ```bash
 # Run all tests
-python -m pytest tests/
+uv run pytest tests/
 
 # Run with coverage
-python -m pytest tests/ --cov=moneywiz_mcp_server
+uv run pytest tests/ --cov=moneywiz_mcp_server
 
 # Run specific test file
-python -m pytest tests/test_accounts.py -v
+uv run pytest tests/test_accounts.py -v
 ```
 
 ### Writing Tests
@@ -153,17 +151,15 @@ python -m pytest tests/test_accounts.py -v
 
 ### Tools
 ```bash
-# Format code
-black src/
-
-# Sort imports
-isort src/
+# Format and lint code
+uv run ruff format .
+uv run ruff check --fix .
 
 # Type checking
-mypy src/
+uv run mypy src/
 
-# Linting
-flake8 src/
+# Security scanning
+uv run bandit -r src/
 ```
 
 ## 📚 Documentation

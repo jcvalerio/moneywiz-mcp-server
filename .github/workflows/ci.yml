@@ -28,49 +28,47 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: uv sync --all-extras
 
       - name: Report versions for transparency
         run: |
           echo "::group::Environment Information"
-          echo "Python version: $(python --version)"
-          echo "Ruff version: $(ruff --version)"
-          echo "Mypy version: $(mypy --version)"
+          echo "Python version: $(uv run python --version)"
+          echo "Ruff version: $(uv run ruff --version)"
+          echo "Mypy version: $(uv run mypy --version)"
+          echo "uv version: $(uv --version)"
           echo "::endgroup::"
 
       - name: Run Ruff linter
         run: |
           echo "::group::Ruff Linting"
-          ruff check . --output-format=github
+          uv run ruff check . --output-format=github
           echo "::endgroup::"
 
       - name: Run Ruff formatter check
         run: |
           echo "::group::Ruff Formatting"
-          ruff format --check .
+          uv run ruff format --check .
           echo "::endgroup::"
-
 
       - name: Run Mypy type checking
         run: |
           echo "::group::Type Checking"
-          mypy src/ --install-types --non-interactive --no-strict-optional
+          uv run mypy src/ --install-types --non-interactive --no-strict-optional
           echo "::endgroup::"
 
       - name: Run Bandit security check
         run: |
           echo "::group::Security Scanning"
-          bandit -r src/ -f json -o bandit-report.json
-          bandit -r src/
+          uv run bandit -r src/ -f json -o bandit-report.json
+          uv run bandit -r src/
           echo "::endgroup::"
 
       - name: Upload Bandit results
@@ -94,20 +92,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]"
+        run: uv sync --all-extras
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=moneywiz_mcp_server --cov-report=xml --cov-report=term-missing -m "not integration"
+          uv run pytest --cov=moneywiz_mcp_server --cov-report=xml --cov-report=term-missing -m "not integration"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -124,16 +120,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
-      - name: Install pre-commit
-        run: pip install pre-commit
+      - name: Install dependencies
+        run: uv sync --all-extras
 
       - name: Run pre-commit hooks
-        run: pre-commit run --all-files
+        run: uv run pre-commit run --all-files
 
   # Package build test
   build:
@@ -144,21 +141,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
+          enable-cache: true
 
       - name: Build package
-        run: python -m build
+        run: uv build
 
       - name: Check package
-        run: twine check dist/*
+        run: uvx twine check dist/*
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -175,19 +168,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: uv sync --all-extras
 
       - name: Run integration tests
         run: |
-          pytest tests/integration/ -v --tb=short
+          uv run pytest tests/integration/ -v --tb=short
 
   # Documentation build (if docs exist)
   docs:
@@ -198,10 +190,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
       - name: Check for documentation
         id: check-docs
@@ -215,8 +208,7 @@ jobs:
       - name: Build documentation
         if: steps.check-docs.outputs.docs-exist == 'true'
         run: |
-          pip install -r docs/requirements.txt || pip install mkdocs mkdocs-material
-          mkdocs build --strict
+          uvx --with mkdocs-material mkdocs build --strict
 
   # Final status check
   ci-success:

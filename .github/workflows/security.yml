@@ -19,29 +19,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.12"
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install safety pip-audit
+        run: uv sync --all-extras
 
-      - name: Run Safety check
+      - name: Run uv audit (vulnerability check)
         run: |
-          echo "::group::Safety Check"
-          safety check --output json > safety-report.json
-          safety check
+          echo "::group::uv Audit"
+          uv audit
           echo "::endgroup::"
 
       - name: Run pip-audit
         run: |
           echo "::group::Pip Audit"
-          pip-audit --format=json --output=pip-audit-report.json
-          pip-audit
+          uvx pip-audit --format=json --output=pip-audit-report.json
+          uvx pip-audit
           echo "::endgroup::"
 
       - name: Upload security reports
@@ -50,7 +47,6 @@ jobs:
         with:
           name: security-reports
           path: |
-            safety-report.json
             pip-audit-report.json
 
   # Dependency analysis
@@ -61,26 +57,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.12"
-
-      - name: Install pip-tools
-        run: pip install pip-tools
+          enable-cache: true
 
       - name: Check for dependency updates
         run: |
           echo "::group::Dependency Updates"
-          pip-compile --upgrade --resolver=backtracking pyproject.toml --extra=dev --output-file=requirements-dev.txt
-          pip-compile --upgrade --resolver=backtracking pyproject.toml --output-file=requirements.txt
+          uv lock --upgrade --dry-run
           echo "::endgroup::"
 
       - name: Check dependency tree
         run: |
-          pip install pipdeptree
           echo "::group::Dependency Tree"
-          pipdeptree --warn silence
+          uv tree
           echo "::endgroup::"
 
   # CodeQL analysis
