@@ -9,6 +9,11 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 ### Added
 
 - Roadmap planning for release stability, binary distribution, onboarding, and feature completeness.
+- Stable-version usage and rollback guidance for source-checkout installs.
+
+### Changed
+
+- Tightened release/versioning policy, MCP compatibility expectations, and release checklist guidance.
 
 ## 1.0.0 - TBD
 
