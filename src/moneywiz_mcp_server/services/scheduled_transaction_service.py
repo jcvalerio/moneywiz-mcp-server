@@ -29,6 +29,7 @@ class ScheduledTransactionService:
         self._category_cache: dict[int, str] = {}
         self._payee_cache: dict[int, str] = {}
         self._account_cache: dict[int, str] = {}
+        self._tag_cache: dict[int, str] = {}
 
     async def get_scheduled_transactions(
         self,
@@ -150,14 +151,25 @@ class ScheduledTransactionService:
                 else datetime.now()
             )
 
-            # Get account, category, payee info based on entity type
+            # Get account, category, payee, and tag info based on entity type
+            account_id = str(record.get("ZACCOUNT1", ""))
+            category_info = await self._get_category_info_for_scheduled(record)
+            tags = await self._get_tags_for_scheduled(record)
+            payee: str | None
+
             if entity_type == 33:  # Transfer transactions
-                account_id = str(record.get("ZACCOUNT1", ""))
-                category = "Transfer"
+                if not category_info["category"]:
+                    category_info["category"] = "Transfer"
+                    category_info["category_hierarchy"] = ["Transfer"]
+                    category_info["category_path"] = "Transfer"
+                    category_info["root_category"] = "Transfer"
                 payee = "Transfer to Account"
             else:  # Entity 34 - Regular transactions
-                account_id = str(record.get("ZACCOUNT1", ""))
-                category = await self._get_category_name_for_scheduled(record)
+                if not category_info["category"]:
+                    category_info["category"] = "Uncategorized"
+                    category_info["category_hierarchy"] = ["Uncategorized"]
+                    category_info["category_path"] = "Uncategorized"
+                    category_info["root_category"] = "Uncategorized"
                 payee = await self._get_payee_name(record.get("ZPAYEE1"))
 
             # Determine recurrence pattern from ZDURATIONUNITS1
@@ -179,7 +191,9 @@ class ScheduledTransactionService:
             )
 
             # Get description
-            description = record.get("ZDESC1") or f"Scheduled {category}"
+            description = (
+                record.get("ZDESC1") or f"Scheduled {category_info['category']}"
+            )
 
             # Create the model
             scheduled_transaction = ScheduledTransactionModel(
@@ -188,9 +202,16 @@ class ScheduledTransactionService:
                 amount=Decimal(str(amount)),
                 currency=record.get("ZCURRENCYNAME3", "USD"),
                 account_id=account_id,
-                category=category or "Uncategorized",
+                category=category_info["category"] or "Uncategorized",
+                category_id=category_info["category_id"],
+                parent_category=category_info["parent_category"],
+                parent_category_id=category_info["parent_category_id"],
+                root_category=category_info["root_category"],
+                category_path=category_info["category_path"],
+                category_hierarchy=category_info["category_hierarchy"],
                 payee=payee or "Unknown",
                 transaction_type=self._infer_transaction_type(amount),
+                tags=tags,
                 recurrence_pattern=recurrence_pattern,
                 recurrence_interval=record.get("ZDURATION1", 1),
                 next_execution_date=next_execution_date,
@@ -268,17 +289,112 @@ class ScheduledTransactionService:
         }
         return handlers.get(weekend_handler, WeekendHandling.SAME_DAY)
 
-    async def _get_category_name_for_scheduled(
+    async def _get_category_info_for_scheduled(
         self, record: dict[str, Any]
-    ) -> str | None:
-        """Get category name for scheduled transactions."""
-        # For scheduled transactions, category might not be directly linked
-        # This would need investigation into how MoneyWiz stores categories for scheduled transactions
-        # For now, return a default based on transaction type
-        if record.get("ZPAYEE1"):
-            return "Bills & Utilities"
-        else:
-            return "Transfer"
+    ) -> dict[str, Any]:
+        """Get assigned leaf category and hierarchy for a scheduled transaction."""
+        category_id = await self._get_category_id_for_scheduled(record)
+        if category_id is None:
+            return self._empty_category_info()
+
+        return await self._build_category_info(category_id)
+
+    async def _get_category_id_for_scheduled(
+        self, record: dict[str, Any]
+    ) -> int | None:
+        """Get the assigned category ID for a scheduled transaction."""
+        scheduled_id = record.get("Z_PK")
+        if scheduled_id:
+            try:
+                # MoneyWiz stores scheduled category links in ZCATEGORYASSIGMENT.
+                # Column names keep MoneyWiz/Core Data's misspelling of "TRANSACITION".
+                category_assignment_query = """
+                SELECT ca.ZCATEGORY
+                FROM ZCATEGORYASSIGMENT ca
+                WHERE ca.ZSCHEDULEDTRANSACITION = ?
+                   OR ca.Z31_SCHEDULEDTRANSACITION = ?
+                LIMIT 1
+                """
+                category_assignment = await self.db_manager.execute_query(
+                    category_assignment_query, (scheduled_id, scheduled_id)
+                )
+
+                if category_assignment:
+                    category_id = category_assignment[0].get("ZCATEGORY")
+                    if isinstance(category_id, int):
+                        return category_id
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to resolve scheduled category for {scheduled_id}: {e}"
+                )
+
+        for field_name in ("ZCATEGORY", "ZCATEGORY1", "ZCATEGORY2"):
+            category_id = record.get(field_name)
+            if isinstance(category_id, int):
+                return category_id
+
+        return None
+
+    @staticmethod
+    def _empty_category_info() -> dict[str, Any]:
+        """Return default empty category hierarchy information."""
+        return {
+            "category": None,
+            "category_id": None,
+            "parent_category": None,
+            "parent_category_id": None,
+            "root_category": None,
+            "category_path": None,
+            "category_hierarchy": [],
+        }
+
+    async def _build_category_info(self, category_id: int) -> dict[str, Any]:
+        """Build category hierarchy information for a category ID."""
+        hierarchy = await self._get_category_hierarchy(category_id)
+        if not hierarchy:
+            return self._empty_category_info()
+
+        hierarchy_names = [item["name"] for item in hierarchy]
+        parent = hierarchy[-2] if len(hierarchy) > 1 else None
+
+        return {
+            "category": hierarchy_names[-1],
+            "category_id": hierarchy[-1]["id"],
+            "parent_category": parent["name"] if parent else None,
+            "parent_category_id": parent["id"] if parent else None,
+            "root_category": hierarchy_names[0],
+            "category_path": " ▶ ".join(hierarchy_names),
+            "category_hierarchy": hierarchy_names,
+        }
+
+    async def _get_category_hierarchy(self, category_id: int) -> list[dict[str, Any]]:
+        """Get category hierarchy from root to leaf."""
+        hierarchy: list[dict[str, Any]] = []
+        current_id: int | None = category_id
+        visited_ids = set()
+
+        while current_id and current_id not in visited_ids:
+            visited_ids.add(current_id)
+
+            query = """
+            SELECT Z_PK, ZNAME2, ZPARENTCATEGORY
+            FROM ZSYNCOBJECT
+            WHERE Z_ENT = 19 AND Z_PK = ?
+            """
+            result = await self.db_manager.execute_query(query, (current_id,))
+            if not result:
+                break
+
+            category_row = result[0]
+            category_name = category_row.get("ZNAME2")
+            if category_name:
+                hierarchy.insert(0, {"id": current_id, "name": category_name})
+
+            parent_id = category_row.get("ZPARENTCATEGORY")
+            current_id = parent_id if isinstance(parent_id, int) else None
+
+        return hierarchy
 
     def _infer_transaction_type(self, amount: float) -> TransactionType:
         """Infer transaction type from amount."""
@@ -355,16 +471,102 @@ class ScheduledTransactionService:
             return self._payee_cache[payee_id]
 
         try:
-            query = "SELECT ZNAME FROM ZSYNCOBJECT WHERE Z_ENT = 28 AND Z_PK = ?"
+            query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = 28 AND Z_PK = ?"
             result = await self.db_manager.execute_query(query, (payee_id,))
             if result:
-                payee_name: str = result[0].get("ZNAME", "Unknown")
+                payee_name = self._extract_payee_name(result[0], payee_id)
                 self._payee_cache[payee_id] = payee_name
                 return payee_name
         except Exception as e:
             logger.warning(f"Failed to get payee name for {payee_id}: {e}")
 
         return None
+
+    async def _get_tags_for_scheduled(self, record: dict[str, Any]) -> list[str]:
+        """Get tag names for a scheduled transaction."""
+        scheduled_id = record.get("Z_PK")
+        if not scheduled_id:
+            return []
+
+        try:
+            tag_query = """
+            SELECT Z_35TAGS2 AS tag_id
+            FROM Z_31TAGS
+            WHERE Z_31SCHEDULEDTRANSACTIONS1 = ?
+            """
+            tag_results = await self.db_manager.execute_query(
+                tag_query, (scheduled_id,)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to get scheduled tags for {scheduled_id}: {e}")
+            return []
+
+        tag_names: list[str] = []
+        for tag_result in tag_results:
+            tag_id = tag_result.get("tag_id")
+            if tag_id is None:
+                continue
+
+            tag_name = await self._get_tag_name(tag_id)
+            if tag_name and tag_name != "NULL":
+                tag_names.append(tag_name)
+
+        return tag_names
+
+    async def _get_tag_name(self, tag_id: int) -> str:
+        """Get tag name from cache or database."""
+        if tag_id in self._tag_cache:
+            return self._tag_cache[tag_id]
+
+        try:
+            query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = 35 AND Z_PK = ?"
+            result = await self.db_manager.execute_query(query, (tag_id,))
+            if result:
+                tag_name = self._extract_tag_name(result[0], tag_id)
+            else:
+                tag_name = f"Tag_{tag_id}"
+        except Exception as e:
+            logger.warning(f"Failed to get tag name for {tag_id}: {e}")
+            tag_name = f"Tag_{tag_id}"
+
+        self._tag_cache[tag_id] = tag_name
+        return tag_name
+
+    @staticmethod
+    def _extract_tag_name(tag_row: dict[str, Any], tag_id: int) -> str:
+        """Extract a tag name from schema-dependent MoneyWiz tag fields."""
+        for field_name in (
+            "ZNAME6",
+            "ZNAME2",
+            "ZNAME",
+            "ZDESC2",
+            "ZDESC",
+            "ZVALUE",
+            "ZGID",
+        ):
+            value = tag_row.get(field_name)
+            if value:
+                return str(value)
+
+        return f"Tag_{tag_id}"
+
+    @staticmethod
+    def _extract_payee_name(payee_row: dict[str, Any], payee_id: int) -> str:
+        """Extract a payee name from schema-dependent MoneyWiz payee fields."""
+        for field_name in (
+            "ZNAME5",
+            "ZNAME2",
+            "ZNAME",
+            "ZDESC2",
+            "ZDESC",
+            "ZVALUE",
+            "ZGID",
+        ):
+            value = payee_row.get(field_name)
+            if value:
+                return str(value)
+
+        return f"Payee_{payee_id}"
 
     async def calculate_salary_breakdown(
         self,

@@ -95,13 +95,24 @@ class TransactionResponse(BaseModel):
     date: str = Field(..., description="Transaction date (ISO format)")
     description: str = Field(..., description="Transaction description")
     amount: float = Field(..., description="Transaction amount")
-    category: str = Field(..., description="Transaction category")
+    category: str = Field(..., description="Transaction leaf category")
+    category_id: int | None = Field(None, description="Transaction category ID")
+    parent_category: str | None = Field(None, description="Immediate parent category")
+    parent_category_id: int | None = Field(
+        None, description="Immediate parent category ID"
+    )
+    root_category: str | None = Field(None, description="Root category")
+    category_path: str | None = Field(None, description="Full category hierarchy path")
+    category_hierarchy: list[str] = Field(
+        default_factory=list, description="Category hierarchy from root to leaf"
+    )
     payee: str = Field(..., description="Transaction payee")
     account_id: str = Field(..., description="Associated account ID")
     transaction_type: str = Field(..., description="Type of transaction")
     currency: str = Field(..., description="Transaction currency")
     reconciled: bool = Field(..., description="Whether transaction is reconciled")
     notes: str | None = Field(None, description="Transaction notes")
+    tags: list[str] = Field(default_factory=list, description="Transaction tags")
 
 
 class TransactionListResponse(BaseModel):

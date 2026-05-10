@@ -3,6 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 import logging
+from typing import Any
 
 from typing_extensions import TypedDict
 
@@ -511,14 +512,14 @@ class TransactionService:
 
             # Get payee name if payee_id exists
             if transaction.payee_id and transaction.payee_id not in self._payee_cache:
-                payee_query = (
-                    "SELECT ZNAME FROM ZSYNCOBJECT WHERE Z_ENT = 28 AND Z_PK = ?"
-                )
+                payee_query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = 28 AND Z_PK = ?"
                 payee_result = await self.db_manager.execute_query(
                     payee_query, (transaction.payee_id,)
                 )
                 if payee_result:
-                    self._payee_cache[transaction.payee_id] = payee_result[0]["ZNAME"]
+                    self._payee_cache[transaction.payee_id] = self._extract_payee_name(
+                        payee_result[0], transaction.payee_id
+                    )
                 else:
                     self._payee_cache[transaction.payee_id] = "Unknown Payee"
 
@@ -547,8 +548,8 @@ class TransactionService:
                 transaction.account_id, "USD"
             )
 
-            # Get tags for this transaction (disabled due to schema changes)
-            transaction.tags = []  # Set empty tags to avoid errors
+            # Get tags for this transaction
+            await self._enhance_transaction_with_tags(transaction)
 
             return transaction
 
@@ -777,54 +778,80 @@ class TransactionService:
                 tag_query, (int(transaction.id),)
             )
 
-            if tag_results:
-                tag_names: list[str] = []
-                for tag_result in tag_results:
-                    tag_id = tag_result["tag_id"]
+            tag_names: list[str] = []
+            for tag_result in tag_results:
+                tag_id = tag_result.get("tag_id")
+                if tag_id is None:
+                    continue
 
-                    # Get tag name if not cached
-                    if tag_id not in self._tag_cache:
-                        # Try different fields for tag names - investigate all available fields
-                        tag_name_query = """
-                        SELECT ZNAME, ZNAME2, ZTITLE, ZLABEL, ZDESC, ZDESC2, ZVALUE
-                        FROM ZSYNCOBJECT
-                        WHERE Z_ENT = 35 AND Z_PK = ?
-                        """
-                        tag_name_result = await self.db_manager.execute_query(
-                            tag_name_query, (tag_id,)
-                        )
+                # Get tag name if not cached
+                if tag_id not in self._tag_cache:
+                    # Query the full row because MoneyWiz tag name columns vary by schema.
+                    tag_name_query = """
+                    SELECT *
+                    FROM ZSYNCOBJECT
+                    WHERE Z_ENT = 35 AND Z_PK = ?
+                    """
+                    tag_name_result = await self.db_manager.execute_query(
+                        tag_name_query, (tag_id,)
+                    )
 
-                        if tag_name_result:
-                            # Try different name fields in order of preference
-                            tag_row = tag_name_result[0]
-                            tag_name = (
-                                tag_row.get("ZNAME2")
-                                or tag_row.get("ZNAME")
-                                or tag_row.get("ZTITLE")
-                                or tag_row.get("ZLABEL")
-                                or tag_row.get("ZDESC2")
-                                or tag_row.get("ZDESC")
-                                or tag_row.get("ZVALUE")
-                                or f"Tag_{tag_id}"
-                            )
-                            self._tag_cache[tag_id] = tag_name
+                    if tag_name_result:
+                        tag_row = tag_name_result[0]
+                        tag_name = self._extract_tag_name(tag_row, tag_id)
+                        self._tag_cache[tag_id] = tag_name
 
-                            # Log what fields we found for debugging
-                            logger.debug(f"Tag {tag_id} fields: {dict(tag_row)}")
-                        else:
-                            self._tag_cache[tag_id] = f"Tag_{tag_id}"
+                        logger.debug(f"Tag {tag_id} fields: {dict(tag_row)}")
+                    else:
+                        self._tag_cache[tag_id] = f"Tag_{tag_id}"
 
-                    tag_name = self._tag_cache.get(tag_id, f"Tag_{tag_id}")
-                    if tag_name and tag_name != "NULL":
-                        tag_names.append(tag_name)
+                tag_name = self._tag_cache.get(tag_id, f"Tag_{tag_id}")
+                if tag_name and tag_name != "NULL":
+                    tag_names.append(tag_name)
 
-                transaction.tags = tag_names
+            transaction.tags = tag_names
 
         except Exception as e:
             logger.warning(
                 f"Failed to enhance transaction {transaction.id} with tags: {e}"
             )
             transaction.tags = []
+
+    @staticmethod
+    def _extract_tag_name(tag_row: dict[str, Any], tag_id: int) -> str:
+        """Extract a tag name from schema-dependent MoneyWiz tag fields."""
+        for field_name in (
+            "ZNAME6",
+            "ZNAME2",
+            "ZNAME",
+            "ZDESC2",
+            "ZDESC",
+            "ZVALUE",
+            "ZGID",
+        ):
+            value = tag_row.get(field_name)
+            if value:
+                return str(value)
+
+        return f"Tag_{tag_id}"
+
+    @staticmethod
+    def _extract_payee_name(payee_row: dict[str, Any], payee_id: int) -> str:
+        """Extract a payee name from schema-dependent MoneyWiz payee fields."""
+        for field_name in (
+            "ZNAME5",
+            "ZNAME2",
+            "ZNAME",
+            "ZDESC2",
+            "ZDESC",
+            "ZVALUE",
+            "ZGID",
+        ):
+            value = payee_row.get(field_name)
+            if value:
+                return str(value)
+
+        return f"Payee_{payee_id}"
 
     async def _enhance_category_hierarchy(self, transaction: TransactionModel) -> None:
         """
@@ -841,7 +868,7 @@ class TransactionService:
 
         try:
             # Build hierarchy by traversing parent categories
-            hierarchy: list[str] = []
+            hierarchy: list[tuple[int, str]] = []
             current_id: int | None = transaction.category_id
             visited_ids = set()  # Prevent infinite loops
 
@@ -865,39 +892,30 @@ class TransactionService:
 
                     if category_name:
                         hierarchy.insert(
-                            0, category_name
+                            0, (current_id, category_name)
                         )  # Add to beginning for correct order
 
                     current_id = parent_id if isinstance(parent_id, int) else None
                 else:
                     break
 
+            hierarchy_names = [name for _, name in hierarchy]
+
             # Set hierarchy information
-            if len(hierarchy) > 1:
+            if len(hierarchy_names) > 1:
                 # Multi-level hierarchy
-                transaction.parent_category = hierarchy[0]
-                transaction.category_path = " ▶ ".join(hierarchy)
-                transaction.category_hierarchy = hierarchy
+                parent_id, parent_name = hierarchy[-2]
+                transaction.parent_category = parent_name
+                transaction.parent_category_id = parent_id
+                transaction.category_path = " ▶ ".join(hierarchy_names)
+                transaction.category_hierarchy = hierarchy_names
 
                 # Update main category to be the leaf (most specific)
-                transaction.category = hierarchy[-1]
-
-                # Cache parent category info if we found it
-                if len(hierarchy) >= 2:
-                    # Get parent category ID for caching
-                    parent_query = """
-                    SELECT Z_PK FROM ZSYNCOBJECT
-                    WHERE Z_ENT = 19 AND ZNAME2 = ?
-                    """
-                    parent_result = await self.db_manager.execute_query(
-                        parent_query, (hierarchy[0],)
-                    )
-                    if parent_result:
-                        transaction.parent_category_id = parent_result[0]["Z_PK"]
-            elif len(hierarchy) == 1:
+                transaction.category = hierarchy_names[-1]
+            elif len(hierarchy_names) == 1:
                 # Single-level category (no parent)
-                transaction.category_hierarchy = hierarchy
-                transaction.category_path = hierarchy[0]
+                transaction.category_hierarchy = hierarchy_names
+                transaction.category_path = hierarchy_names[0]
 
             logger.debug(
                 f"Enhanced transaction {transaction.id} with category hierarchy: {transaction.category_path}"
