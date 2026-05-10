@@ -2,7 +2,7 @@
 
 All notable changes to MoneyWiz MCP Server will be documented in this file.
 
-This project follows semantic versioning where possible. See `docs/ROADMAP.md` and future release documentation for compatibility expectations.
+This project follows semantic versioning where possible. See `docs/ROADMAP.md` and `docs/RELEASING.md` for compatibility expectations.
 
 ## Unreleased
 
@@ -14,6 +14,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 ### Changed
 
 - Tightened release/versioning policy, MCP compatibility expectations, and release checklist guidance.
+- Cleaned package metadata for the first stable baseline and future publishing workflows.
 
 ## 1.0.0 - TBD
 

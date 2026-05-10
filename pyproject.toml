@@ -5,22 +5,42 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "moneywiz-mcp-server"
 version = "1.0.0"
-description = "MCP server for MoneyWiz financial data integration"
+description = "Read-only MCP server for local MoneyWiz financial analytics"
 authors = [
-    {name = "MoneyWiz MCP Team", email = "dev@example.com"}
+    {name = "Juan Carlos Valerio Arrieta", email = "jcvalerio@gmail.com"}
+]
+maintainers = [
+    {name = "Juan Carlos Valerio Arrieta", email = "jcvalerio@gmail.com"}
 ]
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
-keywords = ["mcp", "moneywiz", "finance", "ai", "claude"]
+keywords = [
+    "ai",
+    "analytics",
+    "claude",
+    "finance",
+    "macos",
+    "mcp",
+    "model-context-protocol",
+    "moneywiz",
+    "personal-finance",
+    "sqlite",
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: MacOS X",
     "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
@@ -58,6 +78,8 @@ moneywiz-mcp-server = "moneywiz_mcp_server.main:cli_main"
 
 [project.urls]
 "Homepage" = "https://github.com/jcvalerio/moneywiz-mcp-server"
+"Documentation" = "https://github.com/jcvalerio/moneywiz-mcp-server#readme"
+"Changelog" = "https://github.com/jcvalerio/moneywiz-mcp-server/blob/main/CHANGELOG.md"
 "Bug Reports" = "https://github.com/jcvalerio/moneywiz-mcp-server/issues"
 "Source" = "https://github.com/jcvalerio/moneywiz-mcp-server"
 
