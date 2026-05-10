@@ -83,6 +83,36 @@ uv sync --all-extras
 uv run python setup_env.py
 ```
 
+## 📌 Stable Releases and Rollback
+
+For day-to-day use, prefer a tagged stable release once one is published. This keeps your Claude Desktop setup on known-good behavior while new roadmap work continues.
+
+```bash
+# From an existing source checkout
+git fetch --tags
+git checkout v1.0.0
+uv sync --all-extras
+uv run python setup_env.py
+```
+
+To upgrade intentionally, read the release notes first, then check out the desired version:
+
+```bash
+git fetch --tags
+git checkout vX.Y.Z
+uv sync --all-extras
+```
+
+To roll back, return to the previous known-good tag and restart Claude Desktop:
+
+```bash
+git fetch --tags
+git checkout vPREVIOUS_VERSION
+uv sync --all-extras
+```
+
+The Claude Desktop configuration below remains compatible with pinned source checkouts as long as the checkout directory does not move. See [Releasing](docs/RELEASING.md) for the versioning policy and maintainer checklist.
+
 ## ⚙️ Configuration
 
 ### Automatic Setup (Recommended)
