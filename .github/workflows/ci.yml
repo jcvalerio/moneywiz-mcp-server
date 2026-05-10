@@ -190,12 +190,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
-
       - name: Check for documentation
         id: check-docs
         run: |
@@ -204,6 +198,13 @@ jobs:
           else
             echo "docs-exist=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Install uv
+        if: steps.check-docs.outputs.docs-exist == 'true'
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
       - name: Build documentation
         if: steps.check-docs.outputs.docs-exist == 'true'
