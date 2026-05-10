@@ -205,6 +205,14 @@ class TestScheduledTransactionModel:
         )
         assert transaction.urgency_level == "future"
 
+        # Inactive schedules report inactive urgency regardless of next date
+        inactive_data = {**base_data, "is_active": False}
+        transaction = ScheduledTransactionModel(
+            **inactive_data,
+            next_execution_date=datetime.now() + timedelta(days=1),
+        )
+        assert transaction.urgency_level == "inactive"
+
         # Note: next_execution_date=None is not supported by the model (required field)
 
 

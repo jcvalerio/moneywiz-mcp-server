@@ -81,6 +81,14 @@ class TestScheduledTransactionService:
         def mock_execute_query(query, params):
             if "ZISREPEATABLE1 = 1" in query and params[0] == 34:
                 return [sample_database_record]
+            elif "ZCATEGORYASSIGMENT" in query:
+                return [{"ZCATEGORY": 99}]
+            elif "Z_ENT = 19" in query:  # Category lookup
+                return [{"ZNAME2": "Mortgage/Rent"}]
+            elif "Z_31TAGS" in query:
+                return [{"tag_id": 35}]
+            elif "Z_ENT = 35" in query:  # Tag lookup
+                return [{"ZNAME6": "Fixed Expense"}]
             elif "Z_ENT = 28" in query:  # Payee lookup
                 return [{"ZNAME": "Landlord"}]
             else:
@@ -97,8 +105,9 @@ class TestScheduledTransactionService:
         assert transaction.description == "Rent Payment"
         assert transaction.amount == Decimal("-500.0")
         assert transaction.currency == "USD"
-        assert transaction.category == "Bills & Utilities"
+        assert transaction.category == "Mortgage/Rent"
         assert transaction.payee == "Landlord"
+        assert transaction.tags == ["Fixed Expense"]
         assert transaction.transaction_type == TransactionType.WITHDRAW
         assert transaction.completed_occurrences == 3
         assert transaction.end_condition == RecurrenceEndCondition.NEVER

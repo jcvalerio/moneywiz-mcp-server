@@ -46,9 +46,20 @@ class ScheduledTransactionModel(BaseModel):
     amount: Decimal = Field(..., description="Transaction amount")
     currency: str = Field(..., description="Transaction currency")
     account_id: str = Field(..., description="Associated account ID")
-    category: str = Field(..., description="Transaction category")
+    category: str = Field(..., description="Transaction leaf category")
+    category_id: int | None = Field(None, description="Transaction category ID")
+    parent_category: str | None = Field(None, description="Immediate parent category")
+    parent_category_id: int | None = Field(
+        None, description="Immediate parent category ID"
+    )
+    root_category: str | None = Field(None, description="Root category")
+    category_path: str | None = Field(None, description="Full category hierarchy path")
+    category_hierarchy: list[str] = Field(
+        default_factory=list, description="Category hierarchy from root to leaf"
+    )
     payee: str = Field(..., description="Transaction payee")
     transaction_type: TransactionType = Field(..., description="Type of transaction")
+    tags: list[str] = Field(default_factory=list, description="Transaction tags")
 
     # Recurrence Information
     recurrence_pattern: RecurrencePattern = Field(
@@ -119,8 +130,8 @@ class ScheduledTransactionModel(BaseModel):
 
     @property
     def urgency_level(self) -> str:
-        """Determine urgency level based on next execution date."""
-        if self.next_execution_date is None:
+        """Determine urgency level based on active status and next execution date."""
+        if not self.is_active:
             return "inactive"
 
         from datetime import timedelta
@@ -172,12 +183,23 @@ class ScheduledTransactionResponse(BaseModel):
     description: str = Field(..., description="Transaction description")
     amount: float = Field(..., description="Transaction amount")
     currency: str = Field(..., description="Transaction currency")
-    category: str = Field(..., description="Transaction category")
+    category: str = Field(..., description="Transaction leaf category")
+    category_id: int | None = Field(None, description="Transaction category ID")
+    parent_category: str | None = Field(None, description="Immediate parent category")
+    parent_category_id: int | None = Field(
+        None, description="Immediate parent category ID"
+    )
+    root_category: str | None = Field(None, description="Root category")
+    category_path: str | None = Field(None, description="Full category hierarchy path")
+    category_hierarchy: list[str] = Field(
+        default_factory=list, description="Category hierarchy from root to leaf"
+    )
     payee: str = Field(..., description="Transaction payee")
     account_id: str = Field(..., description="Associated account ID")
     recurrence_pattern: str = Field(..., description="Recurrence pattern")
     next_execution_date: str = Field(..., description="Next execution date (ISO)")
     transaction_type: str = Field(..., description="Transaction type")
+    tags: list[str] = Field(default_factory=list, description="Transaction tags")
 
     # Occurrence tracking
     end_condition: str = Field(..., description="End condition")
