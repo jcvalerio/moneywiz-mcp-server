@@ -154,6 +154,12 @@ uv sync --all-extras
   ```
 
 - [ ] Verify package artifacts are created under `dist/`.
+- [ ] Check package artifacts:
+
+  ```bash
+  uvx twine check dist/*
+  ```
+
 - [ ] Smoke test the built package where practical.
 - [ ] If binary release is configured in a later task, build the macOS binary and smoke test it.
 - [ ] Do not promise binary, Homebrew, or PyPI install paths until the corresponding release workflow exists and has been verified.
@@ -174,9 +180,10 @@ git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-- [ ] Create a GitHub Release from the tag.
-- [ ] Upload package artifacts from `dist/`.
+- [ ] Create and publish a GitHub Release from the tag.
+- [ ] Confirm the release workflow builds package artifacts and uploads `dist/*` to the GitHub Release.
 - [ ] Upload binary artifacts only if binary release support has been implemented and verified.
+- [ ] Do not publish to PyPI until the separate PyPI publishing workflow is implemented and configured.
 - [ ] Include install, upgrade, compatibility, and rollback instructions in release notes.
 
 ### 7. After release
