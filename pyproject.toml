@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -26,10 +26,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp[cli]>=1.0.0",
+    "mcp[cli]>=1.27.1",
     "aiosqlite>=0.19.0",
     "python-dateutil>=2.8.0",
-    "pydantic>=2.0.0",
+    "pydantic>=2.13.4",
     "python-dotenv>=1.0.0",
     "typing-extensions>=4.8.0",
 ]
@@ -40,10 +40,10 @@ dev = [
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.0",
-    "ruff==0.12.4",
-    "types-python-dateutil>=2.8.0",
-    "mypy>=1.8.0",
-    "pre-commit>=3.6.0",
+    "ruff==0.15.12",
+    "types-python-dateutil>=2.9.0.20260508",
+    "mypy>=2.0.0",
+    "pre-commit>=4.6.0",
     "bandit>=1.7.5",
 ]
 test = [
@@ -51,7 +51,7 @@ test = [
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.0",
-    "coverage[toml]>=7.9.0",
+    "coverage[toml]>=7.14.0",
 ]
 
 [project.scripts]
