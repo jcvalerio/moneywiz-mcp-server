@@ -270,5 +270,20 @@ class CurrencyAmounts:
                 return CurrencyAmounts(value)
             raise ValueError(f"Cannot convert {type(value)} to CurrencyAmounts")
 
-        # Use a simple validator with no-op serializer since we have field_serializer in base class
-        return core_schema.with_info_plain_validator_function(validate_currency_amounts)
+        def serialize_currency_amounts(value: "CurrencyAmounts") -> dict[str, float]:
+            """Serialize CurrencyAmounts to a JSON-compatible currency mapping."""
+            return value.to_json_dict()
+
+        currency_mapping_schema = core_schema.dict_schema(
+            core_schema.str_schema(),
+            core_schema.float_schema(),
+        )
+
+        return core_schema.with_info_plain_validator_function(
+            validate_currency_amounts,
+            json_schema_input_schema=currency_mapping_schema,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                serialize_currency_amounts,
+                return_schema=currency_mapping_schema,
+            ),
+        )

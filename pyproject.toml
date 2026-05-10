@@ -10,13 +10,12 @@ authors = [
     {name = "MoneyWiz MCP Team", email = "dev@example.com"}
 ]
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 keywords = ["mcp", "moneywiz", "finance", "ai", "claude"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -169,7 +168,6 @@ ignore = [
     "PLR0912", # too many branches
     "PLR0915", # too many statements
     "PLR2004", # magic value comparison
-    "PD901",   # pandas df generic names
     "PT011",   # pytest-raises-too-broad
     # Temporary ignores to unblock CI - to be addressed in follow-up
     "PLR0911", # too many return statements (date parser)

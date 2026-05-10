@@ -45,6 +45,19 @@ class TestFastMCPToolsIntegration:
         main_module._config = original_config
 
     @pytest.mark.asyncio
+    async def test_all_registered_tools_have_output_schemas(self):
+        """Verify all FastMCP tools expose structured output schemas."""
+        tools = await mcp.list_tools()
+        missing_output_schemas = [
+            tool.name
+            for tool in tools
+            if not getattr(tool, "outputSchema", None)
+            and not getattr(tool, "output_schema", None)
+        ]
+
+        assert missing_output_schemas == []
+
+    @pytest.mark.asyncio
     @pytest.mark.usefixtures("_setup_mcp_config")
     async def test_get_savings_recommendations_tool(self):
         """Test get_savings_recommendations FastMCP tool."""
