@@ -120,13 +120,13 @@ Suggested labels:
 
 | ID | Task | Priority | Size | Status | Issue | PR |
 |---|---|---:|---:|---|---|---|
-| MW-000 | Document release/versioning policy | P0 | XS | Not started | TBD | TBD |
-| MW-001 | Add initial changelog | P0 | XS | Not started | TBD | TBD |
-| MW-002 | Add release checklist | P0 | XS | Not started | TBD | TBD |
-| MW-003 | Tag current stable baseline release | P0 | XS | Not started | TBD | TBD |
-| MW-004 | Document how existing users stay on a stable version | P0 | XS | Not started | TBD | TBD |
-| MW-005 | Clean package metadata for publishing | P0 | XS | Not started | TBD | TBD |
-| MW-006 | Add GitHub release workflow draft | P0 | S | Not started | TBD | TBD |
+| MW-000 | Document release/versioning policy | P0 | XS | Done | TBD | #17 |
+| MW-001 | Add initial changelog | P0 | XS | Done | TBD | #15 |
+| MW-002 | Add release checklist | P0 | XS | Done | TBD | #17 |
+| MW-003 | Tag current stable baseline release | P0 | XS | In progress | TBD | TBD |
+| MW-004 | Document how existing users stay on a stable version | P0 | XS | Done | TBD | #17 |
+| MW-005 | Clean package metadata for publishing | P0 | XS | Done | TBD | #18 |
+| MW-006 | Add GitHub release workflow draft | P0 | S | Done | TBD | #19 |
 | MW-007 | Evaluate standalone macOS binary options | P0 | XS | Not started | TBD | TBD |
 | MW-008 | Add standalone macOS binary build workflow | P0 | M | Not started | TBD | TBD |
 | MW-009 | Add diagnostics command | P1 | M | Not started | TBD | TBD |
@@ -197,6 +197,7 @@ Goal: create a stable baseline and release process before changing user-facing b
 - **Size:** XS
 - **Depends on:** MW-000, MW-001, MW-002
 - **Expected outcome:** Existing users have a stable tag they can pin to before larger roadmap work starts.
+- **Preparation status:** baseline metadata is being prepared for `v1.0.0` after PR #19. This task is not complete until a maintainer explicitly confirms tag and GitHub Release publication.
 - **Acceptance criteria:**
   - Maintainer selects baseline version, likely `v1.0.0` if current README/package claims production-ready 1.0.0.
   - Git tag is created from the chosen stable commit.
