@@ -6,20 +6,22 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 1.0.0 - 2026-05-10
+
+Initial stable baseline release to preserve current user workflows before larger roadmap changes.
+
 ### Added
 
 - Roadmap planning for release stability, binary distribution, onboarding, and feature completeness.
+- Initial release checklist, versioning policy, and MCP compatibility guidance.
 - Stable-version usage and rollback guidance for source-checkout installs.
 - GitHub Release artifact workflow for source distribution and wheel uploads.
 
 ### Changed
 
-- Tightened release/versioning policy, MCP compatibility expectations, and release checklist guidance.
 - Cleaned package metadata for the first stable baseline and future publishing workflows.
-
-## 1.0.0 - TBD
-
-Initial stable baseline release to preserve current user workflows before larger roadmap changes.
 
 ### Current capabilities
 
