@@ -6,7 +6,9 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+
+- PyPI publishing workflow draft using GitHub Actions trusted publishing and a protected `pypi` environment.
 
 ## 1.0.0 - 2026-05-10
 

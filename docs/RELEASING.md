@@ -162,7 +162,7 @@ uv sync --all-extras
 
 - [ ] Smoke test the built package where practical.
 - [ ] If binary release is configured in a later task, build the macOS binary and smoke test it.
-- [ ] Do not promise binary, Homebrew, or PyPI install paths until the corresponding release workflow exists and has been verified.
+- [ ] Do not promise binary, Homebrew, or PyPI install paths until the corresponding release channel has been published and verified.
 
 ### 5. Merge release metadata
 
@@ -183,7 +183,8 @@ git push origin vX.Y.Z
 - [ ] Create and publish a GitHub Release from the tag.
 - [ ] Confirm the release workflow builds package artifacts and uploads `dist/*` to the GitHub Release.
 - [ ] Upload binary artifacts only if binary release support has been implemented and verified.
-- [ ] Do not publish to PyPI until the separate PyPI publishing workflow is implemented and configured.
+- [ ] If publishing to PyPI, confirm the trusted publisher and GitHub `pypi` environment are configured, then approve the protected `pypi` deployment after reviewing the release.
+- [ ] If not publishing to PyPI for this release, do not approve the `pypi` deployment.
 - [ ] Include install, upgrade, compatibility, and rollback instructions in release notes.
 
 ### 7. After release
@@ -223,6 +224,34 @@ git fetch --tags
 git checkout v1.0.0
 uv sync --all-extras
 ```
+
+## PyPI Publishing
+
+PyPI publishing uses trusted publishing through GitHub Actions. Do not add a long-lived PyPI API token unless trusted publishing is unavailable.
+
+Required PyPI trusted publisher settings:
+
+- PyPI project name: `moneywiz-mcp-server`
+- Owner: `jcvalerio`
+- Repository name: `moneywiz-mcp-server`
+- Workflow name: `pypi-publish.yml`
+- Environment name: `pypi`
+
+Required GitHub environment:
+
+- Environment name: `pypi`
+- Required reviewer: at least one maintainer
+
+The `.github/workflows/pypi-publish.yml` workflow runs only when a GitHub Release is published with a tag that starts with `v`. It builds the source distribution and wheel, checks them with Twine, uploads them as workflow artifacts, and publishes them to PyPI only after the protected `pypi` environment is approved.
+
+Before approving PyPI publication:
+
+1. Confirm the GitHub Release tag matches `pyproject.toml`.
+2. Confirm the version has not already been published to PyPI.
+3. Confirm release notes and compatibility notes are final.
+4. Confirm source-checkout install guidance remains available for existing users.
+
+If a GitHub Release was already published before the PyPI workflow existed, do not reuse that release event. Publish a later version, such as a patch release, when PyPI availability is ready.
 
 ## Release Notes Template
 
