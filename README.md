@@ -173,7 +173,11 @@ find ~ -name "*.sqlite*" 2>/dev/null | grep -i moneywiz
 
 ### 2. Add MCP Server Configuration
 
-Claude Desktop does not source your shell, so bare commands like `python` or `uv` won't be found. You must use the **absolute path** to the Python binary inside `.venv`.
+Claude Desktop does not source your shell, so bare commands like `python` or `uv` won't be found. Use absolute paths in the configuration.
+
+#### Option A: Source Checkout
+
+Use this option if you cloned the repository and ran `uv sync --all-extras`.
 
 ```json
 {
@@ -196,6 +200,41 @@ echo "$(pwd)/.venv/bin/python"
 The `.venv/bin/python` binary is self-contained — it does **not** require Python to be installed globally on your Mac.
 
 The `cwd` field is required so the server can locate the `.env` file with your database path.
+
+#### Option B: PyPI with `uvx`
+
+Use this option if you want Claude Desktop to run the published package without a source checkout. Because there is no checkout-local `.env` file in this mode, provide the MoneyWiz database path through the `env` block.
+
+First, find the absolute path to `uv`:
+
+```bash
+command -v uv
+# Example output: /Users/yourname/.local/bin/uv
+```
+
+Then configure Claude Desktop. Pin the package version for stable behavior, and replace `MONEYWIZ_DB_PATH` with your actual SQLite database path.
+
+```json
+{
+  "mcpServers": {
+    "moneywiz": {
+      "command": "/ABSOLUTE/PATH/TO/uv",
+      "args": [
+        "x",
+        "--from",
+        "moneywiz-mcp-server==1.0.1",
+        "moneywiz-mcp-server"
+      ],
+      "env": {
+        "MONEYWIZ_DB_PATH": "/ABSOLUTE/PATH/TO/ipadMoneyWiz.sqlite",
+        "MONEYWIZ_READ_ONLY": "true"
+      }
+    }
+  }
+}
+```
+
+If you prefer to use the newest published package instead of a pinned version, remove `==1.0.1`. Pinned versions are recommended for day-to-day use.
 
 ### 3. Restart Claude Desktop
 

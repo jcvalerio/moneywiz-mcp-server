@@ -6,7 +6,13 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+
+- Claude Desktop configuration example for running the published PyPI package with `uvx`.
+
+### Fixed
+
+- Package `__version__` now reflects installed distribution metadata instead of a hardcoded value.
 
 ## 1.0.1 - 2026-05-11
 
