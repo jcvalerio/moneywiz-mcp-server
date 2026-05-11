@@ -6,9 +6,23 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 1.0.1 - 2026-05-11
+
+Patch release to validate the PyPI publishing workflow without changing MCP behavior.
+
 ### Added
 
 - PyPI publishing workflow draft using GitHub Actions trusted publishing and a protected `pypi` environment.
+
+### Compatibility notes
+
+- Breaking changes: none.
+- MCP tool schema changes: none.
+- Configuration changes: none.
+- Financial calculation changes: none.
+- Existing source-checkout installs remain supported.
 
 ## 1.0.0 - 2026-05-10
 

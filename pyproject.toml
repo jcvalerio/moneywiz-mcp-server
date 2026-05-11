@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moneywiz-mcp-server"
-version = "1.0.0"
+version = "1.0.1"
 description = "Read-only MCP server for local MoneyWiz financial analytics"
 authors = [
     {name = "Juan Carlos Valerio Arrieta", email = "jcvalerio@gmail.com"}
