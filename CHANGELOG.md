@@ -10,6 +10,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 - Roadmap planning for release stability, binary distribution, onboarding, and feature completeness.
 - Stable-version usage and rollback guidance for source-checkout installs.
+- GitHub Release artifact workflow for source distribution and wheel uploads.
 
 ### Changed
 
