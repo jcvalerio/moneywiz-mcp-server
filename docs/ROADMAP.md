@@ -131,7 +131,7 @@ Suggested labels:
 | MW-008 | Add standalone macOS binary build workflow | P0 | M | Not started | TBD | TBD |
 | MW-009 | Add diagnostics command | P1 | M | Not started | TBD | TBD |
 | MW-010 | Improve Claude Desktop config generation | P1 | S | Not started | TBD | TBD |
-| MW-011 | Add PyPI publishing workflow draft | P1 | S | In progress | TBD | TBD |
+| MW-011 | Add PyPI publishing workflow draft | P1 | S | Done | TBD | #23 |
 | MW-012 | Document `uvx` install path | P1 | XS | Not started | TBD | TBD |
 | MW-013 | Support database folder paths | P1 | XS | Not started | TBD | TBD |
 | MW-014 | Add exported backup detection to setup script | P1 | S | Not started | TBD | TBD |
@@ -298,7 +298,7 @@ Goal: make setup and troubleshooting easier for both existing and new users.
 - **Priority:** P1
 - **Size:** S
 - **Expected outcome:** Maintainers can publish releases to PyPI from GitHub Actions using trusted publishing or configured secrets.
-- **Implementation status:** workflow draft is being added with PyPI trusted publishing and the protected GitHub `pypi` environment.
+- **Implementation status:** completed in PR #23 with PyPI trusted publishing and the protected GitHub `pypi` environment.
 - **Acceptance criteria:**
   - Workflow triggers only on release/tag.
   - Includes build and artifact upload.
