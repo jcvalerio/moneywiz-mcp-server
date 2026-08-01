@@ -34,6 +34,17 @@ def mock_db_manager():
     db_manager.initialize = AsyncMock()
     db_manager.close = AsyncMock()
     db_manager.execute_query = AsyncMock()
+    db_manager.get_entity_name_map = AsyncMock(
+        return_value={
+            "ScheduledDepositTransactionHandler": 32,
+            "ScheduledTransferTransactionHandler": 33,
+            "ScheduledWithdrawTransactionHandler": 34,
+            "ScheduledTransactionHandler": 31,
+            "Category": 19,
+            "Payee": 28,
+            "Tag": 35,
+        }
+    )
     return db_manager
 
 
@@ -139,10 +150,10 @@ class TestScheduledTransactionsIntegration:
         )
 
         # Set up mock database responses
-        def mock_execute_query(query, params):
-            if "Z_ENT = ?" in query:
+        def mock_execute_query(query, params=None):
+            if "ZISREPEATABLE1" in query:
                 entity_type = params[0]
-                # Service queries entities 17-44, we have test data for 32, 33, 34
+                # Service queries entities 32, 33, 34
                 if entity_type == 32:
                     return [sample_scheduled_records[0]]  # Rent
                 elif entity_type == 33:
@@ -151,11 +162,11 @@ class TestScheduledTransactionsIntegration:
                     return [sample_scheduled_records[2]]  # Phone
                 else:
                     return []  # Other entity types return empty
-            elif "Z_ENT = 19" in query:  # Category lookup
-                category_id = params[0]
+            elif params and params[0] == 19:  # Category lookup
+                category_id = params[-1]
                 return [sample_category_records.get(category_id, {"ZNAME2": "Unknown"})]
-            elif "Z_ENT = 28" in query:  # Payee lookup
-                payee_id = params[0]
+            elif params and params[0] == 28:  # Payee lookup
+                payee_id = params[-1]
                 return [sample_payee_records.get(payee_id, {"ZNAME": "Unknown"})]
             else:
                 return []
@@ -221,8 +232,8 @@ class TestScheduledTransactionsIntegration:
         )
 
         # Set up mock database responses
-        def mock_execute_query(query, params):
-            if "Z_ENT = ?" in query:
+        def mock_execute_query(query, params=None):
+            if "ZISREPEATABLE1" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -232,11 +243,11 @@ class TestScheduledTransactionsIntegration:
                     ]
                 else:
                     return []
-            elif "Z_ENT = 19" in query:  # Category lookup
-                category_id = params[0]
+            elif params and params[0] == 19:  # Category lookup
+                category_id = params[-1]
                 return [sample_category_records.get(category_id, {"ZNAME2": "Unknown"})]
-            elif "Z_ENT = 28" in query:  # Payee lookup
-                payee_id = params[0]
+            elif params and params[0] == 28:  # Payee lookup
+                payee_id = params[-1]
                 return [sample_payee_records.get(payee_id, {"ZNAME": "Unknown"})]
             else:
                 return []
@@ -304,8 +315,8 @@ class TestScheduledTransactionsIntegration:
         )
 
         # Set up mock database responses
-        def mock_execute_query(query, params):
-            if "Z_ENT = ?" in query:
+        def mock_execute_query(query, params=None):
+            if "ZISREPEATABLE1" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -315,11 +326,11 @@ class TestScheduledTransactionsIntegration:
                     ]
                 else:
                     return []
-            elif "Z_ENT = 19" in query:  # Category lookup
-                category_id = params[0]
+            elif params and params[0] == 19:  # Category lookup
+                category_id = params[-1]
                 return [sample_category_records.get(category_id, {"ZNAME2": "Unknown"})]
-            elif "Z_ENT = 28" in query:  # Payee lookup
-                payee_id = params[0]
+            elif params and params[0] == 28:  # Payee lookup
+                payee_id = params[-1]
                 return [sample_payee_records.get(payee_id, {"ZNAME": "Unknown"})]
             else:
                 return []
@@ -375,8 +386,8 @@ class TestScheduledTransactionsIntegration:
         )
 
         # Set up mock database responses
-        def mock_execute_query(query, params):
-            if "Z_ENT = ?" in query:
+        def mock_execute_query(query, params=None):
+            if "ZISREPEATABLE1" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -386,11 +397,11 @@ class TestScheduledTransactionsIntegration:
                     ]
                 else:
                     return []
-            elif "Z_ENT = 19" in query:  # Category lookup
-                category_id = params[0]
+            elif params and params[0] == 19:  # Category lookup
+                category_id = params[-1]
                 return [sample_category_records.get(category_id, {"ZNAME2": "Unknown"})]
-            elif "Z_ENT = 28" in query:  # Payee lookup
-                payee_id = params[0]
+            elif params and params[0] == 28:  # Payee lookup
+                payee_id = params[-1]
                 return [sample_payee_records.get(payee_id, {"ZNAME": "Unknown"})]
             else:
                 return []
@@ -464,7 +475,7 @@ class TestScheduledTransactionsIntegration:
         # Create a record with specific occurrence data
         test_record = {
             "Z_PK": 999,
-            "Z_ENT": 35,
+            "Z_ENT": 34,
             "ZAMOUNT": -200.00,
             "ZDESCRIPTION": "Test Payment",
             "ZNEXTEXECUTIONDATE": 741744000.0,
@@ -481,14 +492,14 @@ class TestScheduledTransactionsIntegration:
         }
 
         # Set up mock database responses
-        def mock_execute_query(query, params):
-            if "Z_ENT = ?" in query and params[0] == 35:
+        def mock_execute_query(query, params=None):
+            if "ZISREPEATABLE1" in query and params[0] == 34:
                 return [test_record]
-            elif "Z_ENT = 19" in query:  # Category lookup
-                category_id = params[0]
+            elif params and params[0] == 19:  # Category lookup
+                category_id = params[-1]
                 return [sample_category_records.get(category_id, {"ZNAME2": "Unknown"})]
-            elif "Z_ENT = 28" in query:  # Payee lookup
-                payee_id = params[0]
+            elif params and params[0] == 28:  # Payee lookup
+                payee_id = params[-1]
                 return [sample_payee_records.get(payee_id, {"ZNAME": "Unknown"})]
             else:
                 return []
@@ -550,6 +561,17 @@ class TestScheduledTransactionsErrorScenarios:
             mock_db.initialize = AsyncMock()
             mock_db.close = AsyncMock()
             mock_db.execute_query = AsyncMock(return_value=[])
+            mock_db.get_entity_name_map = AsyncMock(
+                return_value={
+                    "ScheduledDepositTransactionHandler": 32,
+                    "ScheduledTransferTransactionHandler": 33,
+                    "ScheduledWithdrawTransactionHandler": 34,
+                    "ScheduledTransactionHandler": 31,
+                    "Category": 19,
+                    "Payee": 28,
+                    "Tag": 35,
+                }
+            )
             return mock_db
 
         monkeypatch.setattr(

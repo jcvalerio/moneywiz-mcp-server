@@ -4,7 +4,10 @@ import pytest
 
 from moneywiz_mcp_server.config import Config
 from moneywiz_mcp_server.database.connection import DatabaseManager
-from moneywiz_mcp_server.services.transaction_service import TransactionService
+from moneywiz_mcp_server.services.transaction_service import (
+    TRANSACTION_TYPE_ENTITY_NAMES,
+    TransactionService,
+)
 
 
 @pytest.mark.integration
@@ -93,16 +96,22 @@ class TestCategoryResolution:
     @pytest.mark.asyncio
     async def test_category_names_table(self, real_db_manager):
         """Test category names in ZSYNCOBJECT table."""
-        # Get categories from ZSYNCOBJECT where Z_ENT = 19
+        # Get categories from ZSYNCOBJECT where Z_ENT = the Category entity id
+        entity_map = await real_db_manager.get_entity_name_map()
+        category_entity_id = entity_map["Category"]
         category_query = """
         SELECT Z_PK, ZNAME, ZNAME2
         FROM ZSYNCOBJECT
-        WHERE Z_ENT = 19
+        WHERE Z_ENT = ?
         LIMIT 10
         """
 
-        categories = await real_db_manager.execute_query(category_query)
-        assert len(categories) > 0, "No categories found in ZSYNCOBJECT with Z_ENT = 19"
+        categories = await real_db_manager.execute_query(
+            category_query, (category_entity_id,)
+        )
+        assert len(categories) > 0, (
+            f"No categories found in ZSYNCOBJECT with Z_ENT = {category_entity_id}"
+        )
 
         print("Sample categories:")
         for cat in categories[:5]:
@@ -122,7 +131,15 @@ class TestCategoryResolution:
     async def test_transaction_category_join(self, real_db_manager):
         """Test joining transactions with their categories."""
         # Get some transactions with categories
-        join_query = """
+        entity_map = await real_db_manager.get_entity_name_map()
+        category_entity_id = entity_map["Category"]
+        transaction_entity_ids = [
+            entity_map[name]
+            for name in TRANSACTION_TYPE_ENTITY_NAMES.values()
+            if name in entity_map
+        ]
+        transaction_placeholders = ",".join("?" for _ in transaction_entity_ids)
+        join_query = f"""
         SELECT
             t.Z_PK as transaction_id,
             t.ZDESC2 as description,
@@ -131,13 +148,15 @@ class TestCategoryResolution:
             c.ZNAME2 as category_name2
         FROM ZSYNCOBJECT t
         LEFT JOIN ZCATEGORYASSIGMENT ca ON ca.ZTRANSACTION = t.Z_PK
-        LEFT JOIN ZSYNCOBJECT c ON c.Z_PK = ca.ZCATEGORY AND c.Z_ENT = 19
-        WHERE t.Z_ENT IN (37, 45, 46, 47)
+        LEFT JOIN ZSYNCOBJECT c ON c.Z_PK = ca.ZCATEGORY AND c.Z_ENT = ?
+        WHERE t.Z_ENT IN ({transaction_placeholders})
         AND t.ZDESC2 IS NOT NULL
         LIMIT 20
         """
 
-        results = await real_db_manager.execute_query(join_query)
+        results = await real_db_manager.execute_query(
+            join_query, (category_entity_id, *transaction_entity_ids)
+        )
         assert len(results) > 0, "No transactions found"
 
         categorized_count = 0
@@ -167,9 +186,11 @@ class TestCategoryResolution:
                 COUNT(c.ZNAME) as with_zname,
                 COUNT(c.ZNAME2) as with_zname2
             FROM ZCATEGORYASSIGMENT ca
-            LEFT JOIN ZSYNCOBJECT c ON c.Z_PK = ca.ZCATEGORY AND c.Z_ENT = 19
+            LEFT JOIN ZSYNCOBJECT c ON c.Z_PK = ca.ZCATEGORY AND c.Z_ENT = ?
             """
-            debug_result = await real_db_manager.execute_query(debug_query)
+            debug_result = await real_db_manager.execute_query(
+                debug_query, (category_entity_id,)
+            )
             print(f"Debug - Total assignments: {debug_result[0]['total_assignments']}")
             print(f"Debug - With ZNAME: {debug_result[0]['with_zname']}")
             print(f"Debug - With ZNAME2: {debug_result[0]['with_zname2']}")
@@ -182,15 +203,25 @@ class TestCategoryResolution:
         transaction_service = TransactionService(real_db_manager)
 
         # Get some real transactions
-        raw_query = """
+        entity_map = await real_db_manager.get_entity_name_map()
+        entity_id_to_type = {
+            entity_map[name]: t_type
+            for t_type, name in TRANSACTION_TYPE_ENTITY_NAMES.items()
+            if name in entity_map
+        }
+        transaction_entity_ids = list(entity_id_to_type.keys())
+        transaction_placeholders = ",".join("?" for _ in transaction_entity_ids)
+        raw_query = f"""
         SELECT Z_PK, Z_ENT, ZACCOUNT2, ZAMOUNT1, ZDATE1, ZDESC2, ZPAYEE2
         FROM ZSYNCOBJECT
-        WHERE Z_ENT IN (37, 45, 46, 47)
+        WHERE Z_ENT IN ({transaction_placeholders})
         AND ZDESC2 IS NOT NULL
         LIMIT 10
         """
 
-        raw_transactions = await real_db_manager.execute_query(raw_query)
+        raw_transactions = await real_db_manager.execute_query(
+            raw_query, transaction_entity_ids
+        )
         assert len(raw_transactions) > 0, "No transactions found"
 
         # Convert to TransactionModel and enhance
@@ -202,7 +233,9 @@ class TestCategoryResolution:
             from moneywiz_mcp_server.models.transaction import TransactionModel
 
             # Use the proper factory method to create transaction with all required fields
-            transaction = TransactionModel.from_raw_data(raw_tx)
+            transaction = TransactionModel.from_raw_data(
+                raw_tx, entity_id_to_type=entity_id_to_type
+            )
 
             # Enhance with category information
             enhanced = await transaction_service._enhance_transaction(transaction)
@@ -239,7 +272,15 @@ class TestCategoryResolution:
         if any(t["name"] == "ZCATEGORYASSIGNMENT" for t in category_tables):
             print("Found ZCATEGORYASSIGNMENT (with N) - testing this table...")
 
-            alt_query = """
+            entity_map = await real_db_manager.get_entity_name_map()
+            category_entity_id = entity_map["Category"]
+            transaction_entity_ids = [
+                entity_map[name]
+                for name in TRANSACTION_TYPE_ENTITY_NAMES.values()
+                if name in entity_map
+            ]
+            transaction_placeholders = ",".join("?" for _ in transaction_entity_ids)
+            alt_query = f"""
             SELECT
                 t.Z_PK as transaction_id,
                 t.ZDESCRIPTION as description,
@@ -247,14 +288,16 @@ class TestCategoryResolution:
                 c.ZNAME2 as category_name
             FROM ZSYNCOBJECT t
             LEFT JOIN ZCATEGORYASSIGNMENT ca ON ca.ZTRANSACTION = t.Z_PK
-            LEFT JOIN ZSYNCOBJECT c ON c.Z_PK = ca.ZCATEGORY AND c.Z_ENT = 19
-            WHERE t.Z_ENT IN (37, 45, 46, 47)
+            LEFT JOIN ZSYNCOBJECT c ON c.Z_PK = ca.ZCATEGORY AND c.Z_ENT = ?
+            WHERE t.Z_ENT IN ({transaction_placeholders})
             AND t.ZDESCRIPTION IS NOT NULL
             LIMIT 10
             """
 
             try:
-                alt_results = await real_db_manager.execute_query(alt_query)
+                alt_results = await real_db_manager.execute_query(
+                    alt_query, (category_entity_id, *transaction_entity_ids)
+                )
                 alt_categorized = sum(1 for r in alt_results if r.get("category_name"))
                 print(
                     f"Alternative table results: {alt_categorized}/{len(alt_results)} categorized"

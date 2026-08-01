@@ -13,6 +13,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 ### Fixed
 
 - Package `__version__` now reflects installed distribution metadata instead of a hardcoded value.
+- Core Data `Z_ENT` (entity) ids are now resolved dynamically per database instead of hardcoded, fixing silently wrong or missing data (transactions, tags, account balances, categories, scheduled transactions, budgets) on databases where MoneyWiz assigned different entity ids.
 
 ## 1.0.1 - 2026-05-11
 

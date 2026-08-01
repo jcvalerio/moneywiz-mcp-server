@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from enum import Enum
 import logging
 from typing import Any
 
@@ -21,6 +22,32 @@ from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
 logger = logging.getLogger(__name__)
 
 
+class ScheduledEntityRole(Enum):
+    """Whether a scheduled transaction handler entity represents a transfer
+    between accounts or a regular scheduled transaction to a payee."""
+
+    TRANSFER = "transfer"
+    REGULAR = "regular"
+
+
+# Scheduled transaction handler entities, and their ScheduledEntityRole.
+# Z_ENT ids are resolved dynamically via DatabaseManager.get_entity_name_map()
+# since they are not stable across MoneyWiz versions/exports.
+SCHEDULED_ENTITY_ROLES: dict[str, ScheduledEntityRole] = {
+    "ScheduledTransferTransactionHandler": ScheduledEntityRole.TRANSFER,
+    "ScheduledDepositTransactionHandler": ScheduledEntityRole.REGULAR,
+    "ScheduledWithdrawTransactionHandler": ScheduledEntityRole.REGULAR,
+}
+
+# Entity names used for supporting lookups (category, payee, tag).
+CATEGORY_ENTITY_NAME = "Category"
+PAYEE_ENTITY_NAME = "Payee"
+TAG_ENTITY_NAME = "Tag"
+# Base entity whose Z_ENT id Core Data uses to auto-generate the scheduled
+# transaction <-> tag join table name/columns.
+SCHEDULED_TRANSACTION_HANDLER_ENTITY_NAME = "ScheduledTransactionHandler"
+
+
 class ScheduledTransactionService:
     """Service for scheduled transaction operations with occurrence tracking."""
 
@@ -30,6 +57,46 @@ class ScheduledTransactionService:
         self._payee_cache: dict[int, str] = {}
         self._account_cache: dict[int, str] = {}
         self._tag_cache: dict[int, str] = {}
+        self._scheduled_entity_roles: dict[int, ScheduledEntityRole] | None = None
+
+    async def _get_scheduled_entity_roles(self) -> dict[int, ScheduledEntityRole]:
+        """Resolve scheduled transaction handler Z_ENT ids (cached)."""
+        if self._scheduled_entity_roles is None:
+            entity_map = await self.db_manager.get_entity_name_map()
+            self._scheduled_entity_roles = {
+                entity_map[name]: role
+                for name, role in SCHEDULED_ENTITY_ROLES.items()
+                if name in entity_map
+            }
+        return self._scheduled_entity_roles
+
+    async def _get_category_entity_id(self) -> int:
+        """Resolve this database's Category Z_ENT id.
+
+        DatabaseManager.get_entity_name_map() already caches per-connection,
+        so no additional caching is needed here.
+        """
+        entity_map = await self.db_manager.get_entity_name_map()
+        return entity_map[CATEGORY_ENTITY_NAME]
+
+    async def _get_payee_entity_id(self) -> int:
+        """Resolve this database's Payee Z_ENT id (see _get_category_entity_id)."""
+        entity_map = await self.db_manager.get_entity_name_map()
+        return entity_map[PAYEE_ENTITY_NAME]
+
+    async def _get_tag_entity_id(self) -> int:
+        """Resolve this database's Tag Z_ENT id (see _get_category_entity_id)."""
+        entity_map = await self.db_manager.get_entity_name_map()
+        return entity_map[TAG_ENTITY_NAME]
+
+    async def _get_scheduled_tag_link_columns(self) -> tuple[str, str, str] | None:
+        """Resolve the scheduled-transaction<->tag many-to-many join table.
+
+        See DatabaseManager.resolve_join_table for why this cannot be hardcoded.
+        """
+        return await self.db_manager.resolve_join_table(
+            SCHEDULED_TRANSACTION_HANDLER_ENTITY_NAME, TAG_ENTITY_NAME, "TAGS"
+        )
 
     async def get_scheduled_transactions(
         self,
@@ -57,11 +124,12 @@ class ScheduledTransactionService:
 
             scheduled_transactions = []
 
-            # Entity 33: Scheduled Transfer transactions (between accounts)
-            # Entity 34: Regular scheduled transactions (to payees)
-            scheduled_entities = [33, 34]
+            # Resolve this database's actual Z_ENT ids for each scheduled
+            # transaction handler subtype (ids are not stable across
+            # MoneyWiz versions/exports).
+            entity_roles = await self._get_scheduled_entity_roles()
 
-            for entity_type in scheduled_entities:
+            for entity_type in entity_roles:
                 # Query for active scheduled transactions
                 query = """
                     SELECT * FROM ZSYNCOBJECT
@@ -86,7 +154,7 @@ class ScheduledTransactionService:
                     try:
                         # Convert database record to ScheduledTransactionModel
                         scheduled_transaction = await self._convert_record_to_model(
-                            record, entity_type
+                            record, entity_type, entity_roles[entity_type]
                         )
 
                         # Apply filters
@@ -119,7 +187,7 @@ class ScheduledTransactionService:
             raise
 
     async def _convert_record_to_model(
-        self, record: dict[str, Any], entity_type: int
+        self, record: dict[str, Any], entity_type: int, entity_role: ScheduledEntityRole
     ) -> ScheduledTransactionModel | None:
         """Convert database record to ScheduledTransactionModel."""
         try:
@@ -157,14 +225,14 @@ class ScheduledTransactionService:
             tags = await self._get_tags_for_scheduled(record)
             payee: str | None
 
-            if entity_type == 33:  # Transfer transactions
+            if entity_role == ScheduledEntityRole.TRANSFER:
                 if not category_info["category"]:
                     category_info["category"] = "Transfer"
                     category_info["category_hierarchy"] = ["Transfer"]
                     category_info["category_path"] = "Transfer"
                     category_info["root_category"] = "Transfer"
                 payee = "Transfer to Account"
-            else:  # Entity 34 - Regular transactions
+            else:  # Regular scheduled transactions (to payees)
                 if not category_info["category"]:
                     category_info["category"] = "Uncategorized"
                     category_info["category_hierarchy"] = ["Uncategorized"]
@@ -373,6 +441,7 @@ class ScheduledTransactionService:
         hierarchy: list[dict[str, Any]] = []
         current_id: int | None = category_id
         visited_ids = set()
+        category_entity_id = await self._get_category_entity_id()
 
         while current_id and current_id not in visited_ids:
             visited_ids.add(current_id)
@@ -380,9 +449,11 @@ class ScheduledTransactionService:
             query = """
             SELECT Z_PK, ZNAME2, ZPARENTCATEGORY
             FROM ZSYNCOBJECT
-            WHERE Z_ENT = 19 AND Z_PK = ?
+            WHERE Z_ENT = ? AND Z_PK = ?
             """
-            result = await self.db_manager.execute_query(query, (current_id,))
+            result = await self.db_manager.execute_query(
+                query, (category_entity_id, current_id)
+            )
             if not result:
                 break
 
@@ -451,8 +522,11 @@ class ScheduledTransactionService:
             return self._category_cache[category_id]
 
         try:
-            query = "SELECT ZNAME2 FROM ZSYNCOBJECT WHERE Z_ENT = 19 AND Z_PK = ?"
-            result = await self.db_manager.execute_query(query, (category_id,))
+            category_entity_id = await self._get_category_entity_id()
+            query = "SELECT ZNAME2 FROM ZSYNCOBJECT WHERE Z_ENT = ? AND Z_PK = ?"
+            result = await self.db_manager.execute_query(
+                query, (category_entity_id, category_id)
+            )
             if result:
                 category_name: str = result[0].get("ZNAME2", "Unknown")
                 self._category_cache[category_id] = category_name
@@ -471,8 +545,11 @@ class ScheduledTransactionService:
             return self._payee_cache[payee_id]
 
         try:
-            query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = 28 AND Z_PK = ?"
-            result = await self.db_manager.execute_query(query, (payee_id,))
+            payee_entity_id = await self._get_payee_entity_id()
+            query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ? AND Z_PK = ?"
+            result = await self.db_manager.execute_query(
+                query, (payee_entity_id, payee_id)
+            )
             if result:
                 payee_name = self._extract_payee_name(result[0], payee_id)
                 self._payee_cache[payee_id] = payee_name
@@ -488,11 +565,17 @@ class ScheduledTransactionService:
         if not scheduled_id:
             return []
 
+        link_columns = await self._get_scheduled_tag_link_columns()
+        if link_columns is None:
+            return []
+        table_name, scheduled_column, tag_column = link_columns
+
         try:
-            tag_query = """
-            SELECT Z_35TAGS2 AS tag_id
-            FROM Z_31TAGS
-            WHERE Z_31SCHEDULEDTRANSACTIONS1 = ?
+            # nosec: B608 - table/column names come from sqlite_master, not user input
+            tag_query = f"""
+            SELECT {tag_column} AS tag_id
+            FROM {table_name}
+            WHERE {scheduled_column} = ?
             """
             tag_results = await self.db_manager.execute_query(
                 tag_query, (scheduled_id,)
@@ -519,8 +602,11 @@ class ScheduledTransactionService:
             return self._tag_cache[tag_id]
 
         try:
-            query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = 35 AND Z_PK = ?"
-            result = await self.db_manager.execute_query(query, (tag_id,))
+            tag_entity_id = await self._get_tag_entity_id()
+            query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ? AND Z_PK = ?"
+            result = await self.db_manager.execute_query(
+                query, (tag_entity_id, tag_id)
+            )
             if result:
                 tag_name = self._extract_tag_name(result[0], tag_id)
             else:
@@ -603,6 +689,12 @@ class ScheduledTransactionService:
             commitments_by_currency: dict[str, Decimal] = {}
 
             for transaction in scheduled_transactions:
+                # Only outgoing commitments count against salary coverage;
+                # scheduled deposits (e.g. salary itself) are income, not a
+                # commitment.
+                if transaction.transaction_type == TransactionType.DEPOSIT:
+                    continue
+
                 # Count payments in the period
                 payments_in_period = 0
                 total_impact = Decimal("0")

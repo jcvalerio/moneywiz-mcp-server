@@ -4,6 +4,10 @@ import logging
 from typing import Any
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.services.transaction_service import (
+    ACCOUNT_ENTITY_NAMES,
+    TRANSACTION_TYPE_ENTITY_NAMES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +22,32 @@ class AccountService:
         self, include_hidden: bool = False, account_type: str | None = None
     ) -> list[dict[str, Any]]:
         """List all accounts with balances."""
-        # Account entities: 10=BankCheque, 11=BankSaving, 12=Cash, 13=CreditCard, 14=Loan, 15=Investment, 16=Forex
-        account_entities = [10, 11, 12, 13, 14, 15, 16]
+        # Z_ENT ids are assigned per compiled Core Data model and are not
+        # stable across MoneyWiz versions/exports - always resolve by name.
+        entity_map = await self.db_manager.get_entity_name_map()
+        account_entities = [
+            entity_map[name] for name in ACCOUNT_ENTITY_NAMES if name in entity_map
+        ]
+        entity_types = {
+            entity_map[name]: name for name in ACCOUNT_ENTITY_NAMES if name in entity_map
+        }
 
-        # Get entity type mapping
-        entity_map = await self.db_manager.execute_query(
-            "SELECT Z_ENT, Z_NAME FROM Z_PRIMARYKEY WHERE Z_ENT IN (10,11,12,13,14,15,16)"
-        )
-        entity_types = {e["Z_ENT"]: e["Z_NAME"] for e in entity_map}
+        # Every transaction-family entity that can post an amount against an
+        # account (deposits, withdrawals, transfers, refunds, investment
+        # trades, ...) - the same set transaction_service.get_transactions()
+        # resolves, so balance sums and transaction listings agree on what
+        # counts as a transaction.
+        transaction_entity_ids = [
+            entity_map[name]
+            for name in TRANSACTION_TYPE_ENTITY_NAMES.values()
+            if name in entity_map
+        ]
+        txn_placeholders = ",".join("?" for _ in transaction_entity_ids)
+        if not transaction_entity_ids:
+            logger.warning(
+                "No transaction entity ids resolved for this database - "
+                "account balances will only reflect the opening balance"
+            )
 
         accounts_data = []
         for entity_id in account_entities:
@@ -53,10 +75,16 @@ class AccountService:
 
                 # Calculate balance
                 opening_balance = account.get("ZOPENINGBALANCE", 0)
-                balance_query = "SELECT SUM(ZAMOUNT1) as total FROM ZSYNCOBJECT WHERE Z_ENT IN (37,45,46,47) AND ZACCOUNT2 = ?"
-                balance_result = await self.db_manager.execute_query(
-                    balance_query, (account["Z_PK"],)
-                )
+                balance_result = []
+                if transaction_entity_ids:
+                    # nosec: B608 - safe placeholder substitution
+                    balance_query = (
+                        "SELECT SUM(ZAMOUNT1) as total FROM ZSYNCOBJECT "
+                        f"WHERE Z_ENT IN ({txn_placeholders}) AND ZACCOUNT2 = ?"
+                    )
+                    balance_result = await self.db_manager.execute_query(
+                        balance_query, (*transaction_entity_ids, account["Z_PK"])
+                    )
                 transaction_total = (
                     balance_result[0]["total"]
                     if balance_result and balance_result[0]["total"]

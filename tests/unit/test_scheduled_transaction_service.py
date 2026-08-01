@@ -19,10 +19,30 @@ from moneywiz_mcp_server.services.scheduled_transaction_service import (
 
 
 @pytest.fixture
-def mock_db_manager():
+def entity_map():
+    """Sample Z_ENT id mapping, matching the entity names this service resolves."""
+    return {
+        "ScheduledTransferTransactionHandler": 33,
+        "ScheduledDepositTransactionHandler": 32,
+        "ScheduledWithdrawTransactionHandler": 34,
+        "ScheduledTransactionHandler": 31,
+        "Category": 19,
+        "Payee": 28,
+        "Tag": 35,
+    }
+
+
+@pytest.fixture
+def mock_db_manager(entity_map):
     """Create a mock database manager."""
     db_manager = MagicMock(spec=DatabaseManager)
     db_manager.execute_query = AsyncMock()
+    db_manager.get_entity_name_map = AsyncMock(return_value=entity_map)
+    # ScheduledTransactionHandler=31, Tag=35 -> matches the join table this
+    # service resolves via DatabaseManager.resolve_join_table.
+    db_manager.resolve_join_table = AsyncMock(
+        return_value=("Z_31TAGS", "Z_31SCHEDULEDTRANSACTIONS1", "Z_35TAGS2")
+    )
     return db_manager
 
 
@@ -77,19 +97,19 @@ class TestScheduledTransactionService:
     ):
         """Test getting scheduled transactions with sample data."""
 
-        # Mock database responses - service queries for entities 33 and 34
-        def mock_execute_query(query, params):
+        # Mock database responses - service queries for entities 32, 33 and 34
+        def mock_execute_query(query, params=None):
             if "ZISREPEATABLE1 = 1" in query and params[0] == 34:
                 return [sample_database_record]
             elif "ZCATEGORYASSIGMENT" in query:
                 return [{"ZCATEGORY": 99}]
-            elif "Z_ENT = 19" in query:  # Category lookup
-                return [{"ZNAME2": "Mortgage/Rent"}]
+            elif "ZNAME2" in query and params and params[0] == 19:
+                return [{"ZNAME2": "Mortgage/Rent", "ZPARENTCATEGORY": None}]
             elif "Z_31TAGS" in query:
                 return [{"tag_id": 35}]
-            elif "Z_ENT = 35" in query:  # Tag lookup
+            elif "FROM ZSYNCOBJECT" in query and params and params[0] == 35:
                 return [{"ZNAME6": "Fixed Expense"}]
-            elif "Z_ENT = 28" in query:  # Payee lookup
+            elif "FROM ZSYNCOBJECT" in query and params and params[0] == 28:
                 return [{"ZNAME": "Landlord"}]
             else:
                 return []

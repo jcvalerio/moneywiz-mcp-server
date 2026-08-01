@@ -15,6 +15,28 @@ from moneywiz_mcp_server.models.transaction import TransactionType
 logger = logging.getLogger(__name__)
 
 
+class ClassificationEntityRole(Enum):
+    """Heuristic role a transaction entity plays for category classification."""
+
+    DEPOSIT = "deposit"
+    WITHDRAW = "withdraw"
+    TRANSFER = "transfer"
+    RECONCILE = "reconcile"
+
+
+# Maps each transaction entity relevant to category classification to its
+# ClassificationEntityRole. Z_ENT ids are resolved dynamically via
+# DatabaseManager.get_entity_name_map() since they are not stable across
+# MoneyWiz versions/exports.
+CLASSIFICATION_ENTITY_ROLES: dict[str, ClassificationEntityRole] = {
+    "DepositTransaction": ClassificationEntityRole.DEPOSIT,
+    "WithdrawTransaction": ClassificationEntityRole.WITHDRAW,
+    "TransferDepositTransaction": ClassificationEntityRole.TRANSFER,
+    "TransferWithdrawTransaction": ClassificationEntityRole.TRANSFER,
+    "ReconcileTransaction": ClassificationEntityRole.RECONCILE,
+}
+
+
 class CategoryType(Enum):
     """Category classification types."""
 
@@ -38,6 +60,31 @@ class CategoryClassificationService:
         self._category_patterns_cache: dict[int, dict[str, float]] = {}
         self._patterns_last_updated: datetime | None = None
         self._patterns_cache_duration = timedelta(hours=24)  # Refresh daily
+        self._classification_entity_roles: (
+            dict[int, ClassificationEntityRole] | None
+        ) = None
+
+    async def _get_category_entity_id(self) -> int:
+        """Resolve this database's Category Z_ENT id.
+
+        DatabaseManager.get_entity_name_map() already caches per-connection,
+        so no additional caching is needed here.
+        """
+        entity_map = await self.db_manager.get_entity_name_map()
+        return entity_map["Category"]
+
+    async def _get_classification_entity_roles(
+        self,
+    ) -> dict[int, ClassificationEntityRole]:
+        """Resolve transaction Z_ENT ids relevant to classification (cached)."""
+        if self._classification_entity_roles is None:
+            entity_map = await self.db_manager.get_entity_name_map()
+            self._classification_entity_roles = {
+                entity_map[name]: role
+                for name, role in CLASSIFICATION_ENTITY_ROLES.items()
+                if name in entity_map
+            }
+        return self._classification_entity_roles
 
     async def get_category_type(self, category_id: int) -> CategoryType:
         """
@@ -99,6 +146,8 @@ class CategoryClassificationService:
         visited_ids = set()  # Prevent infinite loops
 
         try:
+            category_entity_id = await self._get_category_entity_id()
+
             while current_id and current_id not in visited_ids:
                 visited_ids.add(current_id)
 
@@ -106,11 +155,11 @@ class CategoryClassificationService:
                 category_query = """
                 SELECT ZNAME2, ZPARENTCATEGORY
                 FROM ZSYNCOBJECT
-                WHERE Z_ENT = 19 AND Z_PK = ?
+                WHERE Z_ENT = ? AND Z_PK = ?
                 """
 
                 category_result = await self.db_manager.execute_query(
-                    category_query, (current_id,)
+                    category_query, (category_entity_id, current_id)
                 )
 
                 if category_result and category_result[0]:
@@ -256,8 +305,13 @@ class CategoryClassificationService:
             CategoryType based on transaction type patterns
         """
         try:
+            entity_roles = await self._get_classification_entity_roles()
+            if not entity_roles:
+                return CategoryType.UNKNOWN
+
+            placeholders = ", ".join("?" for _ in entity_roles)
             # Analyze which transaction types are most commonly used with this category
-            type_analysis_query = """
+            type_analysis_query = f"""
             SELECT
                 t.Z_ENT as entity_type,
                 COUNT(*) as usage_count,
@@ -265,13 +319,13 @@ class CategoryClassificationService:
             FROM ZSYNCOBJECT t
             LEFT JOIN ZCATEGORYASSIGMENT ca ON ca.ZTRANSACTION = t.Z_PK
             WHERE ca.ZCATEGORY = ?
-            AND t.Z_ENT IN (37, 45, 46, 47, 42)  -- Transaction entities
+            AND t.Z_ENT IN ({placeholders})  -- Transaction entities
             GROUP BY t.Z_ENT
             ORDER BY usage_count DESC
             """
 
             results = await self.db_manager.execute_query(
-                type_analysis_query, (category_id,)
+                type_analysis_query, (category_id, *entity_roles.keys())
             )
 
             if not results:
@@ -287,22 +341,23 @@ class CategoryClassificationService:
             if usage_count < 3:
                 return CategoryType.UNKNOWN
 
-            # Map entity types to classifications
-            if entity_type == 37:  # DEPOSIT
+            # Map entity roles to classifications
+            role = entity_roles.get(entity_type)
+            if role == ClassificationEntityRole.DEPOSIT:
                 return (
                     CategoryType.INCOME
                     if positive_ratio > 0.7
                     else CategoryType.UNKNOWN
                 )
-            elif entity_type == 47:  # WITHDRAW
+            elif role == ClassificationEntityRole.WITHDRAW:
                 return (
                     CategoryType.EXPENSE
                     if positive_ratio < 0.3
                     else CategoryType.UNKNOWN
                 )
-            elif entity_type in [45, 46]:  # TRANSFERS
+            elif role == ClassificationEntityRole.TRANSFER:
                 return CategoryType.TRANSFER
-            elif entity_type == 42:  # RECONCILE
+            elif role == ClassificationEntityRole.RECONCILE:
                 return CategoryType.ADJUSTMENT
             else:
                 return CategoryType.UNKNOWN
@@ -327,17 +382,22 @@ class CategoryClassificationService:
             CategoryType classification with conservative defaults
         """
         try:
+            entity_roles = await self._get_classification_entity_roles()
+            if not entity_roles:
+                return CategoryType.UNKNOWN
+
+            placeholders = ", ".join("?" for _ in entity_roles)
             # Check if category has any transactions at all
-            transaction_count_query = """
+            transaction_count_query = f"""
             SELECT COUNT(*) as count
             FROM ZCATEGORYASSIGMENT ca
             LEFT JOIN ZSYNCOBJECT t ON t.Z_PK = ca.ZTRANSACTION
             WHERE ca.ZCATEGORY = ?
-            AND t.Z_ENT IN (37, 45, 46, 47, 42)
+            AND t.Z_ENT IN ({placeholders})
             """
 
             count_result = await self.db_manager.execute_query(
-                transaction_count_query, (category_id,)
+                transaction_count_query, (category_id, *entity_roles.keys())
             )
 
             if not count_result or count_result[0]["count"] == 0:
@@ -373,8 +433,13 @@ class CategoryClassificationService:
         Builds statistical model of each category's usage patterns.
         """
         try:
+            entity_roles = await self._get_classification_entity_roles()
+            if not entity_roles:
+                return
+
+            placeholders = ", ".join("?" for _ in entity_roles)
             # Analyze last 12 months of transactions for patterns
-            analysis_query = """
+            analysis_query = f"""
             SELECT
                 ca.ZCATEGORY as category_id,
                 COUNT(*) as transaction_count,
@@ -384,7 +449,7 @@ class CategoryClassificationService:
                 MAX(t.ZDATE1) as last_transaction
             FROM ZCATEGORYASSIGMENT ca
             LEFT JOIN ZSYNCOBJECT t ON t.Z_PK = ca.ZTRANSACTION
-            WHERE t.Z_ENT IN (37, 45, 46, 47, 42)  -- Transaction entities
+            WHERE t.Z_ENT IN ({placeholders})  -- Transaction entities
             AND t.ZDATE1 > ? -- Last 12 months
             GROUP BY ca.ZCATEGORY
             HAVING COUNT(*) >= 2  -- Minimum transactions for analysis
@@ -396,7 +461,7 @@ class CategoryClassificationService:
             timestamp_12_months_ago = (twelve_months_ago - base_date).total_seconds()
 
             results = await self.db_manager.execute_query(
-                analysis_query, (timestamp_12_months_ago,)
+                analysis_query, (*entity_roles.keys(), timestamp_12_months_ago)
             )
 
             # Clear existing cache
@@ -468,6 +533,8 @@ class CategoryClassificationService:
         visited_ids = set()
 
         try:
+            category_entity_id = await self._get_category_entity_id()
+
             while current_id and current_id not in visited_ids:
                 visited_ids.add(current_id)
 
@@ -483,11 +550,11 @@ class CategoryClassificationService:
                 category_query = """
                 SELECT ZPARENTCATEGORY
                 FROM ZSYNCOBJECT
-                WHERE Z_ENT = 19 AND Z_PK = ?
+                WHERE Z_ENT = ? AND Z_PK = ?
                 """
 
                 category_result = await self.db_manager.execute_query(
-                    category_query, (current_id,)
+                    category_query, (category_entity_id, current_id)
                 )
 
                 if category_result and category_result[0]:
@@ -581,15 +648,18 @@ class CategoryClassificationService:
             Dictionary with classification statistics and insights
         """
         try:
+            category_entity_id = await self._get_category_entity_id()
             # Get all categories
             categories_query = """
             SELECT Z_PK, ZNAME2, ZPARENTCATEGORY
             FROM ZSYNCOBJECT
-            WHERE Z_ENT = 19 AND ZNAME2 IS NOT NULL
+            WHERE Z_ENT = ? AND ZNAME2 IS NOT NULL
             ORDER BY ZNAME2
             """
 
-            categories = await self.db_manager.execute_query(categories_query)
+            categories = await self.db_manager.execute_query(
+                categories_query, (category_entity_id,)
+            )
 
             if not categories:
                 return {"error": "No categories found"}

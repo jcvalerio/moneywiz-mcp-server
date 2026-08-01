@@ -25,6 +25,35 @@ from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
 
 logger = logging.getLogger(__name__)
 
+# Maps each transaction type to its Core Data entity name. Z_ENT ids are
+# assigned per database and are NOT stable across MoneyWiz versions/exports,
+# so entity ids are always resolved dynamically via
+# DatabaseManager.get_entity_name_map() rather than hardcoded here.
+TRANSACTION_TYPE_ENTITY_NAMES: dict[TransactionType, str] = {
+    TransactionType.DEPOSIT: "DepositTransaction",
+    TransactionType.WITHDRAW: "WithdrawTransaction",
+    TransactionType.TRANSFER_IN: "TransferDepositTransaction",
+    TransactionType.TRANSFER_OUT: "TransferWithdrawTransaction",
+    TransactionType.INVESTMENT_BUY: "InvestmentBuyTransaction",
+    TransactionType.INVESTMENT_SELL: "InvestmentSellTransaction",
+    TransactionType.INVESTMENT_EXCHANGE: "InvestmentExchangeTransaction",
+    TransactionType.REFUND: "RefundTransaction",
+    TransactionType.RECONCILE: "ReconcileTransaction",
+    TransactionType.TRANSFER_BUDGET: "TransferBudgetTransaction",
+}
+
+# Account subtype entity names, used to resolve account-table lookups
+# (currency, external id conversion) without assuming a fixed Z_ENT range.
+ACCOUNT_ENTITY_NAMES = [
+    "BankChequeAccount",
+    "BankSavingAccount",
+    "CashAccount",
+    "CreditCardAccount",
+    "LoanAccount",
+    "InvestmentAccount",
+    "ForexAccount",
+]
+
 
 class ExpenseGroupData(TypedDict):
     """TypedDict for expense group aggregation data."""
@@ -52,9 +81,39 @@ class TransactionService:
         self._payee_cache: dict[int, str] = {}
         self._account_currency_cache: dict[int, str] = {}
         self._tag_cache: dict[int, str] = {}  # Cache for tag names
+        self._account_entity_ids: list[int] | None = None
 
         # Initialize category classification service
         self.category_classifier = CategoryClassificationService(db_manager)
+
+    async def _get_account_entity_ids(self) -> list[int]:
+        """Resolve account subtype Z_ENT ids for this database (cached)."""
+        if self._account_entity_ids is None:
+            entity_map = await self.db_manager.get_entity_name_map()
+            self._account_entity_ids = [
+                entity_map[name]
+                for name in ACCOUNT_ENTITY_NAMES
+                if name in entity_map
+            ]
+        return self._account_entity_ids
+
+    async def _get_entity_id(self, entity_name: str) -> int | None:
+        """Resolve a single Core Data entity name to its Z_ENT id."""
+        entity_map = await self.db_manager.get_entity_name_map()
+        return entity_map.get(entity_name)
+
+    async def _get_tag_link_columns(self) -> tuple[str, str, str] | None:
+        """Resolve the transaction<->tag many-to-many join table for this database.
+
+        See DatabaseManager.resolve_join_table for why this cannot be hardcoded.
+
+        Returns:
+            (table_name, transaction_column, tag_column), or None if no
+            matching table is found.
+        """
+        return await self.db_manager.resolve_join_table(
+            "Transaction", "Tag", "TAGS"
+        )
 
     async def get_transactions(
         self,
@@ -90,27 +149,34 @@ class TransactionService:
             start_timestamp = datetime_to_core_data_timestamp(start_date)
             end_timestamp = datetime_to_core_data_timestamp(end_date)
 
-            # Build base query for transaction entities
-            transaction_entities = [37, 45, 46, 47]  # Core transaction types
+            # Resolve this database's actual Z_ENT ids for each transaction
+            # type (ids are not stable across MoneyWiz versions/exports).
+            entity_name_map = await self.db_manager.get_entity_name_map()
+            type_to_entity_id: dict[TransactionType, int] = {
+                t_type: entity_name_map[entity_name]
+                for t_type, entity_name in TRANSACTION_TYPE_ENTITY_NAMES.items()
+                if entity_name in entity_name_map
+            }
+            entity_id_to_type = {
+                entity_id: t_type for t_type, entity_id in type_to_entity_id.items()
+            }
 
-            # Add investment entities if needed
             if transaction_types:
-                investment_types = [
-                    TransactionType.INVESTMENT_BUY,
-                    TransactionType.INVESTMENT_SELL,
-                    TransactionType.INVESTMENT_EXCHANGE,
+                transaction_entities = [
+                    type_to_entity_id[t]
+                    for t in transaction_types
+                    if t in type_to_entity_id
                 ]
-                if any(tt in investment_types for tt in transaction_types):
-                    transaction_entities.extend([38, 40, 41])
-                if TransactionType.REFUND in transaction_types:
-                    transaction_entities.append(43)
-                if TransactionType.RECONCILE in transaction_types:
-                    transaction_entities.append(42)
-                if TransactionType.TRANSFER_BUDGET in transaction_types:
-                    transaction_entities.append(44)
             else:
-                # Include all transaction types by default
-                transaction_entities.extend([38, 40, 41, 42, 43, 44])
+                # Include all known transaction types by default
+                transaction_entities = list(type_to_entity_id.values())
+
+            if not transaction_entities:
+                logger.warning(
+                    "No matching transaction entity ids resolved for this "
+                    "database - returning no transactions"
+                )
+                return []
 
             # Build WHERE conditions using safe parameter substitution
             entity_placeholders = ",".join("?" for _ in transaction_entities)
@@ -160,7 +226,9 @@ class TransactionService:
             category_filtered_count = 0
             for row in rows:
                 try:
-                    transaction = TransactionModel.from_raw_data(row)
+                    transaction = TransactionModel.from_raw_data(
+                        row, entity_id_to_type
+                    )
 
                     # Enhance with category and payee information
                     transaction = await self._enhance_transaction(transaction)
@@ -488,11 +556,12 @@ class TransactionService:
 
                 # Get category name if not cached
                 if category_id not in self._category_cache:
+                    category_entity_id = await self._get_entity_id("Category")
                     category_query = (
-                        "SELECT ZNAME2 FROM ZSYNCOBJECT WHERE Z_ENT = 19 AND Z_PK = ?"
+                        "SELECT ZNAME2 FROM ZSYNCOBJECT WHERE Z_ENT = ? AND Z_PK = ?"
                     )
                     category_result = await self.db_manager.execute_query(
-                        category_query, (category_id,)
+                        category_query, (category_entity_id, category_id)
                     )
                     if category_result and category_result[0]["ZNAME2"]:
                         self._category_cache[category_id] = category_result[0]["ZNAME2"]
@@ -512,9 +581,10 @@ class TransactionService:
 
             # Get payee name if payee_id exists
             if transaction.payee_id and transaction.payee_id not in self._payee_cache:
-                payee_query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = 28 AND Z_PK = ?"
+                payee_entity_id = await self._get_entity_id("Payee")
+                payee_query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ? AND Z_PK = ?"
                 payee_result = await self.db_manager.execute_query(
-                    payee_query, (transaction.payee_id,)
+                    payee_query, (payee_entity_id, transaction.payee_id)
                 )
                 if payee_result:
                     self._payee_cache[transaction.payee_id] = self._extract_payee_name(
@@ -530,13 +600,17 @@ class TransactionService:
 
             # Get account currency if not cached
             if transaction.account_id not in self._account_currency_cache:
-                account_query = """
-                SELECT ZCURRENCYNAME FROM ZSYNCOBJECT
-                WHERE Z_ENT BETWEEN 10 AND 16 AND Z_PK = ?
-                """
-                account_result = await self.db_manager.execute_query(
-                    account_query, (transaction.account_id,)
-                )
+                account_entity_ids = await self._get_account_entity_ids()
+                account_result = []
+                if account_entity_ids:
+                    account_placeholders = ",".join("?" for _ in account_entity_ids)
+                    account_query = f"""
+                    SELECT ZCURRENCYNAME FROM ZSYNCOBJECT
+                    WHERE Z_ENT IN ({account_placeholders}) AND Z_PK = ?
+                    """  # nosec: B608 - safe placeholder substitution
+                    account_result = await self.db_manager.execute_query(
+                        account_query, (*account_entity_ids, transaction.account_id)
+                    )
                 if account_result:
                     self._account_currency_cache[transaction.account_id] = (
                         account_result[0]["ZCURRENCYNAME"]
@@ -761,17 +835,26 @@ class TransactionService:
         self, transaction: TransactionModel
     ) -> None:
         """
-        Enhance transaction with tag information from Z_36TAGS table.
+        Enhance transaction with tag information from the transaction<->tag
+        many-to-many join table (name/columns resolved dynamically - see
+        _get_tag_link_columns).
 
         Args:
             transaction: Transaction to enhance with tags
         """
         try:
+            link_columns = await self._get_tag_link_columns()
+            if link_columns is None:
+                transaction.tags = []
+                return
+            table_name, transaction_column, tag_column = link_columns
+
             # Get tag IDs for this transaction
-            tag_query = """
-            SELECT Z_35TAGS as tag_id
-            FROM Z_36TAGS
-            WHERE Z_36TRANSACTIONS = ?
+            # nosec: B608 - table/column names resolved from sqlite_master, not user input
+            tag_query = f"""
+            SELECT {tag_column} as tag_id
+            FROM {table_name}
+            WHERE {transaction_column} = ?
             """
 
             tag_results = await self.db_manager.execute_query(
@@ -787,13 +870,14 @@ class TransactionService:
                 # Get tag name if not cached
                 if tag_id not in self._tag_cache:
                     # Query the full row because MoneyWiz tag name columns vary by schema.
+                    tag_entity_id = await self._get_entity_id("Tag")
                     tag_name_query = """
                     SELECT *
                     FROM ZSYNCOBJECT
-                    WHERE Z_ENT = 35 AND Z_PK = ?
+                    WHERE Z_ENT = ? AND Z_PK = ?
                     """
                     tag_name_result = await self.db_manager.execute_query(
-                        tag_name_query, (tag_id,)
+                        tag_name_query, (tag_entity_id, tag_id)
                     )
 
                     if tag_name_result:
@@ -871,6 +955,7 @@ class TransactionService:
             hierarchy: list[tuple[int, str]] = []
             current_id: int | None = transaction.category_id
             visited_ids = set()  # Prevent infinite loops
+            category_entity_id = await self._get_entity_id("Category")
 
             while current_id and current_id not in visited_ids:
                 visited_ids.add(current_id)
@@ -879,11 +964,11 @@ class TransactionService:
                 category_query = """
                 SELECT ZNAME2, ZPARENTCATEGORY
                 FROM ZSYNCOBJECT
-                WHERE Z_ENT = 19 AND Z_PK = ?
+                WHERE Z_ENT = ? AND Z_PK = ?
                 """
 
                 category_result = await self.db_manager.execute_query(
-                    category_query, (current_id,)
+                    category_query, (category_entity_id, current_id)
                 )
 
                 if category_result and category_result[0]:
@@ -947,15 +1032,23 @@ class TransactionService:
             ValueError: If any account ID cannot be found or converted
         """
         internal_ids: list[int] = []
+        account_entity_ids = await self._get_account_entity_ids()
+        if not account_entity_ids:
+            raise ValueError(
+                "No account entity ids could be resolved for this database"
+            )
+        account_placeholders = ",".join("?" for _ in account_entity_ids)
 
         for external_id in external_account_ids:
             try:
                 # Try to find account by ZGID (UUID string)
-                zgid_query = """
+                zgid_query = f"""
                 SELECT Z_PK FROM ZSYNCOBJECT
-                WHERE Z_ENT BETWEEN 10 AND 16 AND ZGID = ?
-                """
-                result = await self.db_manager.execute_query(zgid_query, (external_id,))
+                WHERE Z_ENT IN ({account_placeholders}) AND ZGID = ?
+                """  # nosec: B608 - safe placeholder substitution
+                result = await self.db_manager.execute_query(
+                    zgid_query, (*account_entity_ids, external_id)
+                )
 
                 if result:
                     internal_ids.append(result[0]["Z_PK"])
@@ -968,12 +1061,12 @@ class TransactionService:
                 try:
                     potential_internal_id = int(external_id)
                     # Verify this internal ID exists
-                    internal_query = """
+                    internal_query = f"""
                     SELECT Z_PK FROM ZSYNCOBJECT
-                    WHERE Z_ENT BETWEEN 10 AND 16 AND Z_PK = ?
-                    """
+                    WHERE Z_ENT IN ({account_placeholders}) AND Z_PK = ?
+                    """  # nosec: B608 - safe placeholder substitution
                     verify_result = await self.db_manager.execute_query(
-                        internal_query, (potential_internal_id,)
+                        internal_query, (*account_entity_ids, potential_internal_id)
                     )
 
                     if verify_result:
