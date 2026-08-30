@@ -13,6 +13,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 ### Fixed
 
 - Package `__version__` now reflects installed distribution metadata instead of a hardcoded value.
+- Database auto-detection now finds the database under `Data/Library/Application Support`, where MoneyWiz stores it once iCloud sync is enabled, and skips the always-empty CloudKit shared-scope store kept alongside it.
 
 ## 1.0.1 - 2026-05-11
 
