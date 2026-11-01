@@ -105,7 +105,14 @@ class Config:
 
         home = Path.home()
         possible_paths = [
-            # MoneyWiz 3 locations (including Setapp version)
+            # Enabling iCloud sync relocates the database, so prefer these
+            home
+            / "Library/Containers/com.moneywiz.mac/Data/Library/Application Support",
+            home
+            / "Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support",
+            home
+            / "Library/Containers/com.moneywiz.personalfinance-setapp/Data/Library/Application Support",
+            # MoneyWiz 3 (including Setapp), iCloud sync disabled
             home / "Library/Containers/com.moneywiz.mac/Data/Documents",
             home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
             home
@@ -132,7 +139,12 @@ class Config:
             ]
 
             for pattern in patterns:
-                for db_file in base_path.glob(pattern):
+                # sorted() because glob order is filesystem-dependent
+                for db_file in sorted(base_path.glob(pattern)):
+                    # the CloudKit shared-scope store has an identical schema but no
+                    # rows, so selecting it returns empty results rather than an error
+                    if db_file.name.endswith("_shared.sqlite"):
+                        continue
                     if db_file.is_file() and db_file.stat().st_size > 0:
                         logger.info(f"Found potential MoneyWiz database: {db_file}")
                         return str(db_file)

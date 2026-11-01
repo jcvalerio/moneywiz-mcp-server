@@ -149,7 +149,12 @@ MAX_RESULTS=1000
 MoneyWiz stores data in these locations on macOS:
 
 ```bash
-# MoneyWiz 3 (most common)
+# MoneyWiz 3, iCloud sync enabled (current versions)
+~/Library/Containers/com.moneywiz.mac/Data/Library/Application Support/
+~/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/
+~/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Library/Application Support/
+
+# MoneyWiz 3, iCloud sync disabled
 ~/Library/Containers/com.moneywiz.mac/Data/Documents/
 ~/Library/Containers/com.moneywiz.personalfinance/Data/Documents/
 ~/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/
@@ -162,6 +167,8 @@ Search command:
 ```bash
 find ~ -name "*.sqlite*" 2>/dev/null | grep -i moneywiz
 ```
+
+With iCloud sync enabled the search also returns `MoneyWiz_iCloud_shared.sqlite`. That is the CloudKit shared-scope store and holds no data of your own, so point `MONEYWIZ_DB_PATH` at `MoneyWiz_iCloud.sqlite` instead.
 
 ## 🖥️ Claude Desktop Setup
 
