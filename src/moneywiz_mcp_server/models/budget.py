@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from .currency_types import CurrencyAmounts
 
 
-class BudgetPeriod(str, Enum):
+class BudgetPeriod(StrEnum):
     """Budget period/frequency type."""
 
     DAILY = "daily"
@@ -20,7 +20,7 @@ class BudgetPeriod(str, Enum):
     CUSTOM = "custom"
 
 
-class BudgetStatus(str, Enum):
+class BudgetStatus(StrEnum):
     """Budget spending status."""
 
     ON_TRACK = "on_track"  # < 80% spent

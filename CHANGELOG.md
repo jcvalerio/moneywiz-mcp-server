@@ -6,6 +6,12 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** Python 3.11 is now the minimum supported version. Python 3.10 reached end of life on 2026-10-01, and patched releases of some dependencies no longer support it. Python 3.13 is now tested in CI.
+- `mcp` is constrained to `<2` until the server is migrated to the 2.x API.
+- Upgraded locked dependencies to resolve published security advisories, including `mcp`, `starlette`, `pyjwt`, `cryptography`, `python-multipart`, `anyio`, `filelock`, and `virtualenv`.
+
 ### Added
 
 - Claude Desktop configuration example for running the published PyPI package with `uvx`.
