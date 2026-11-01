@@ -17,6 +17,9 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
+# Core Data's generated table and column names, e.g. "Z_36TAGS", "Z_35TAGS2".
+_CORE_DATA_IDENTIFIER = re.compile(r"Z_\w+", re.ASCII)
+
 
 class DatabaseManager:
     """Manages connections to MoneyWiz SQLite database.
@@ -280,20 +283,27 @@ class DatabaseManager:
 
         owner_prefix = re.compile(rf"^Z_{owner_entity_id}(?!\d)")
         related_prefix = re.compile(
-            rf"^Z_{related_entity_id}{related_suffix}(?!\d*[A-Za-z])"
+            rf"^Z_{related_entity_id}{re.escape(related_suffix)}(?!\d*[A-Za-z])"
         )
 
         tables = await self.execute_query(
-            "SELECT name FROM sqlite_master WHERE type='table' "
-            f"AND name LIKE 'Z_%{related_suffix}'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ?",
+            (f"Z_%{related_suffix}",),
         )
 
         result: tuple[str, str, str] | None = None
         for table_row in tables:
             table_name = table_row["name"]
-            # nosec: B608 - table_name comes from sqlite_master, not user input
-            columns = await self.execute_query(f"PRAGMA table_info({table_name})")
-            column_names = [c["name"] for c in columns]
+            # Callers interpolate these names into SQL, so accept only plain
+            # Core Data identifiers (Z_ followed by letters, digits, underscores).
+            if not _CORE_DATA_IDENTIFIER.fullmatch(table_name):
+                continue
+            columns = await self.execute_query(
+                f"PRAGMA table_info({table_name})"  # nosec: B608 - validated identifier
+            )
+            column_names = [
+                c["name"] for c in columns if _CORE_DATA_IDENTIFIER.fullmatch(c["name"])
+            ]
 
             owner_column = next(
                 (c for c in column_names if owner_prefix.match(c)), None

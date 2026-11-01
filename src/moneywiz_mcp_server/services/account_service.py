@@ -29,7 +29,9 @@ class AccountService:
             entity_map[name] for name in ACCOUNT_ENTITY_NAMES if name in entity_map
         ]
         entity_types = {
-            entity_map[name]: name for name in ACCOUNT_ENTITY_NAMES if name in entity_map
+            entity_map[name]: name
+            for name in ACCOUNT_ENTITY_NAMES
+            if name in entity_map
         }
 
         # Every transaction-family entity that can post an amount against an
@@ -77,9 +79,8 @@ class AccountService:
                 opening_balance = account.get("ZOPENINGBALANCE", 0)
                 balance_result = []
                 if transaction_entity_ids:
-                    # nosec: B608 - safe placeholder substitution
                     balance_query = (
-                        "SELECT SUM(ZAMOUNT1) as total FROM ZSYNCOBJECT "
+                        "SELECT SUM(ZAMOUNT1) as total FROM ZSYNCOBJECT "  # nosec: B608 - safe placeholder substitution
                         f"WHERE Z_ENT IN ({txn_placeholders}) AND ZACCOUNT2 = ?"
                     )
                     balance_result = await self.db_manager.execute_query(

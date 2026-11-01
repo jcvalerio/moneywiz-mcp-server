@@ -91,9 +91,7 @@ class TransactionService:
         if self._account_entity_ids is None:
             entity_map = await self.db_manager.get_entity_name_map()
             self._account_entity_ids = [
-                entity_map[name]
-                for name in ACCOUNT_ENTITY_NAMES
-                if name in entity_map
+                entity_map[name] for name in ACCOUNT_ENTITY_NAMES if name in entity_map
             ]
         return self._account_entity_ids
 
@@ -111,9 +109,7 @@ class TransactionService:
             (table_name, transaction_column, tag_column), or None if no
             matching table is found.
         """
-        return await self.db_manager.resolve_join_table(
-            "Transaction", "Tag", "TAGS"
-        )
+        return await self.db_manager.resolve_join_table("Transaction", "Tag", "TAGS")
 
     async def get_transactions(
         self,
@@ -226,9 +222,7 @@ class TransactionService:
             category_filtered_count = 0
             for row in rows:
                 try:
-                    transaction = TransactionModel.from_raw_data(
-                        row, entity_id_to_type
-                    )
+                    transaction = TransactionModel.from_raw_data(row, entity_id_to_type)
 
                     # Enhance with category and payee information
                     transaction = await self._enhance_transaction(transaction)
@@ -850,12 +844,11 @@ class TransactionService:
             table_name, transaction_column, tag_column = link_columns
 
             # Get tag IDs for this transaction
-            # nosec: B608 - table/column names resolved from sqlite_master, not user input
             tag_query = f"""
             SELECT {tag_column} as tag_id
             FROM {table_name}
             WHERE {transaction_column} = ?
-            """
+            """  # nosec: B608 - identifiers validated by resolve_join_table
 
             tag_results = await self.db_manager.execute_query(
                 tag_query, (int(transaction.id),)

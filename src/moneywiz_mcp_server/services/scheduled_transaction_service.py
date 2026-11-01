@@ -571,12 +571,11 @@ class ScheduledTransactionService:
         table_name, scheduled_column, tag_column = link_columns
 
         try:
-            # nosec: B608 - table/column names come from sqlite_master, not user input
             tag_query = f"""
             SELECT {tag_column} AS tag_id
             FROM {table_name}
             WHERE {scheduled_column} = ?
-            """
+            """  # nosec: B608 - identifiers validated by resolve_join_table
             tag_results = await self.db_manager.execute_query(
                 tag_query, (scheduled_id,)
             )
@@ -604,9 +603,7 @@ class ScheduledTransactionService:
         try:
             tag_entity_id = await self._get_tag_entity_id()
             query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ? AND Z_PK = ?"
-            result = await self.db_manager.execute_query(
-                query, (tag_entity_id, tag_id)
-            )
+            result = await self.db_manager.execute_query(query, (tag_entity_id, tag_id))
             if result:
                 tag_name = self._extract_tag_name(result[0], tag_id)
             else:

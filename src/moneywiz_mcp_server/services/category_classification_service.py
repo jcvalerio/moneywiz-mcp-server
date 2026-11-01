@@ -322,7 +322,7 @@ class CategoryClassificationService:
             AND t.Z_ENT IN ({placeholders})  -- Transaction entities
             GROUP BY t.Z_ENT
             ORDER BY usage_count DESC
-            """
+            """  # nosec: B608 - safe placeholder substitution
 
             results = await self.db_manager.execute_query(
                 type_analysis_query, (category_id, *entity_roles.keys())
@@ -394,7 +394,7 @@ class CategoryClassificationService:
             LEFT JOIN ZSYNCOBJECT t ON t.Z_PK = ca.ZTRANSACTION
             WHERE ca.ZCATEGORY = ?
             AND t.Z_ENT IN ({placeholders})
-            """
+            """  # nosec: B608 - safe placeholder substitution
 
             count_result = await self.db_manager.execute_query(
                 transaction_count_query, (category_id, *entity_roles.keys())
@@ -453,7 +453,7 @@ class CategoryClassificationService:
             AND t.ZDATE1 > ? -- Last 12 months
             GROUP BY ca.ZCATEGORY
             HAVING COUNT(*) >= 2  -- Minimum transactions for analysis
-            """
+            """  # nosec: B608 - safe placeholder substitution
 
             # Calculate timestamp for 12 months ago (Core Data uses seconds since 2001-01-01)
             twelve_months_ago = datetime.now() - timedelta(days=365)
