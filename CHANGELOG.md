@@ -6,6 +6,12 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** Python 3.11 is now the minimum supported version. Python 3.10 reached end of life on 2026-10-01, and patched releases of some dependencies no longer support it. Python 3.13 is now tested in CI.
+- `mcp` is constrained to `<2` until the server is migrated to the 2.x API.
+- Upgraded locked dependencies to resolve published security advisories, including `mcp`, `starlette`, `pyjwt`, `cryptography`, `python-multipart`, `anyio`, `filelock`, and `virtualenv`.
+
 ### Added
 
 - Claude Desktop configuration example for running the published PyPI package with `uvx`.
@@ -13,6 +19,9 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 ### Fixed
 
 - Package `__version__` now reflects installed distribution metadata instead of a hardcoded value.
+- Database auto-detection now finds the database under `Data/Library/Application Support`, where MoneyWiz stores it once iCloud sync is enabled, and skips the always-empty CloudKit shared-scope store kept alongside it.
+- Database auto-detection no longer selects SQLite side files (`-wal`, `-shm`, `-journal`), ranks MoneyWiz-named files ahead of unrelated SQLite stores, and logs a warning instead of silently skipping directories that macOS privacy controls block.
+- `setup_env.py` now uses the same detection logic as the server, so it finds databases relocated by iCloud sync.
 - Core Data `Z_ENT` (entity) ids are now resolved dynamically per database instead of hardcoded, fixing silently wrong or missing data (transactions, tags, account balances, categories, scheduled transactions, budgets) on databases where MoneyWiz assigned different entity ids.
 
 ## 1.0.1 - 2026-05-11

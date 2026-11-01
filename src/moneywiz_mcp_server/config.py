@@ -9,6 +9,82 @@ from .utils.env_loader import load_env_file
 
 logger = logging.getLogger(__name__)
 
+# Container IDs for MoneyWiz 3: direct download, App Store, and Setapp builds.
+_MONEYWIZ_CONTAINERS = (
+    "com.moneywiz.mac",
+    "com.moneywiz.personalfinance",
+    "com.moneywiz.personalfinance-setapp",
+)
+
+_DB_SUFFIXES = frozenset({".sqlite", ".sqlite3", ".db"})
+
+
+def moneywiz_search_dirs(home: Path | None = None) -> list[Path]:
+    """Return directories that may hold the MoneyWiz database, most preferred first.
+
+    Enabling iCloud sync moves the database from ``Data/Documents`` to
+    ``Data/Library/Application Support``, so the latter is checked first: when
+    both exist, it is the one MoneyWiz is currently writing to.
+    """
+    home = home or Path.home()
+    containers = [
+        home / "Library/Containers" / c / "Data" for c in _MONEYWIZ_CONTAINERS
+    ]
+    return [
+        *(c / "Library/Application Support" for c in containers),
+        *(c / "Documents" for c in containers),
+        home / "Library/Application Support/MoneyWiz",
+        home / "Library/Application Support/SilverWiz/MoneyWiz 2",
+    ]
+
+
+def _is_candidate_database(path: Path) -> bool:
+    """Return True if ``path`` looks like a usable MoneyWiz database file.
+
+    The suffix check excludes SQLite side files (``-wal``, ``-shm``,
+    ``-journal``). The CloudKit shared-scope store (``*_shared.sqlite``) is
+    excluded because it has the real schema but no rows, so selecting it
+    yields empty results instead of an error.
+    """
+    if path.suffix.lower() not in _DB_SUFFIXES:
+        return False
+    if path.stem.lower().endswith("_shared"):
+        return False
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError as e:
+        logger.debug(f"Skipping {path}: {e.strerror or e}")
+        return False
+
+
+def find_moneywiz_databases(home: Path | None = None) -> list[Path]:
+    """Find candidate MoneyWiz databases, best match first.
+
+    Files whose name contains "moneywiz" rank ahead of other SQLite files in
+    any searched directory, because the container's ``Application Support``
+    directory can also hold unrelated stores. Within each group, results follow
+    directory preference and then file name, so the order is deterministic.
+    """
+    ranked: list[tuple[int, int, str, Path]] = []
+    for dir_rank, directory in enumerate(moneywiz_search_dirs(home)):
+        if not directory.is_dir():
+            continue
+        logger.debug(f"Searching for database in: {directory}")
+        try:
+            entries = list(directory.iterdir())
+        except OSError as e:
+            # macOS privacy controls can deny access to another app's container
+            logger.warning(
+                f"Cannot read {directory}: {e.strerror or e}. Grant Full Disk "
+                "Access to the app running this server, or set MONEYWIZ_DB_PATH."
+            )
+            continue
+        for path in entries:
+            if _is_candidate_database(path):
+                name_rank = 0 if "moneywiz" in path.name.lower() else 1
+                ranked.append((name_rank, dir_rank, path.name, path))
+    return [path for *_, path in sorted(ranked)]
+
 
 @dataclass
 class Config:
@@ -103,39 +179,16 @@ class Config:
                 "This application only runs on macOS where MoneyWiz is available"
             )
 
-        home = Path.home()
-        possible_paths = [
-            # MoneyWiz 3 locations (including Setapp version)
-            home / "Library/Containers/com.moneywiz.mac/Data/Documents",
-            home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
-            home
-            / "Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents",
-            home / "Library/Application Support/MoneyWiz",
-            # MoneyWiz 2 locations
-            home / "Library/Application Support/SilverWiz/MoneyWiz 2",
-        ]
-
-        # Search for SQLite database files
-        for base_path in possible_paths:
-            if not base_path.exists():
-                continue
-
-            logger.debug(f"Searching for database in: {base_path}")
-
-            # Look for common database file patterns
-            patterns = [
-                "*.sqlite",
-                "*.sqlite3",
-                "*.db",
-                "*MoneyWiz*.sqlite*",
-                "*database*.sqlite*",
-            ]
-
-            for pattern in patterns:
-                for db_file in base_path.glob(pattern):
-                    if db_file.is_file() and db_file.stat().st_size > 0:
-                        logger.info(f"Found potential MoneyWiz database: {db_file}")
-                        return str(db_file)
+        candidates = find_moneywiz_databases()
+        if candidates:
+            selected = candidates[0]
+            logger.info(f"Found potential MoneyWiz database: {selected}")
+            if len(candidates) > 1:
+                logger.info(
+                    f"{len(candidates) - 1} other candidate database(s) found; "
+                    "set MONEYWIZ_DB_PATH to choose a different one"
+                )
+            return str(selected)
 
         logger.warning("Could not auto-detect MoneyWiz database location")
         logger.info(

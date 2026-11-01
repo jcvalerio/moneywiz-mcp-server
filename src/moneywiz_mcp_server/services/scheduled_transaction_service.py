@@ -166,7 +166,7 @@ class ScheduledTransactionService:
                         ):
                             scheduled_transactions.append(scheduled_transaction)
 
-                    except Exception as e:  # noqa: PERF203
+                    except Exception as e:
                         logger.warning(
                             f"Failed to convert record {record.get('Z_PK')} "
                             f"from entity {entity_type}: {e}"

@@ -149,7 +149,12 @@ MAX_RESULTS=1000
 MoneyWiz stores data in these locations on macOS:
 
 ```bash
-# MoneyWiz 3 (most common)
+# MoneyWiz 3, iCloud sync enabled (current versions)
+~/Library/Containers/com.moneywiz.mac/Data/Library/Application Support/
+~/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/
+~/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Library/Application Support/
+
+# MoneyWiz 3, iCloud sync disabled
 ~/Library/Containers/com.moneywiz.mac/Data/Documents/
 ~/Library/Containers/com.moneywiz.personalfinance/Data/Documents/
 ~/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/
@@ -162,6 +167,12 @@ Search command:
 ```bash
 find ~ -name "*.sqlite*" 2>/dev/null | grep -i moneywiz
 ```
+
+With iCloud sync enabled the search also returns `MoneyWiz_iCloud_shared.sqlite`. That is the CloudKit shared-scope store and holds no data of your own, so point `MONEYWIZ_DB_PATH` at `MoneyWiz_iCloud.sqlite` instead.
+
+Auto-detection skips that shared store and SQLite side files (`-wal`, `-shm`), and prefers files named after MoneyWiz over other SQLite files in the same folders. If more than one candidate is found, it logs how many and uses the best match; set `MONEYWIZ_DB_PATH` to choose a different one.
+
+If the logs show `Cannot read ...: Operation not permitted`, macOS privacy controls are blocking access to the MoneyWiz container. Grant **Full Disk Access** (System Settings → Privacy & Security) to the app that runs the server, such as Claude Desktop or your terminal, or set `MONEYWIZ_DB_PATH` directly.
 
 ## 🖥️ Claude Desktop Setup
 
