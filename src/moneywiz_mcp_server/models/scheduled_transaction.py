@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -12,7 +12,7 @@ from .currency_types import CurrencyAmounts
 from .transaction import TransactionType
 
 
-class RecurrencePattern(str, Enum):
+class RecurrencePattern(StrEnum):
     """Enumeration of recurrence patterns for scheduled transactions."""
 
     DAILY = "daily"
@@ -21,7 +21,7 @@ class RecurrencePattern(str, Enum):
     YEARLY = "yearly"
 
 
-class RecurrenceEndCondition(str, Enum):
+class RecurrenceEndCondition(StrEnum):
     """Enumeration of end conditions for scheduled transactions."""
 
     NEVER = "never"  # Infinite recurrence
@@ -29,7 +29,7 @@ class RecurrenceEndCondition(str, Enum):
     ON_DATE = "on_date"  # End on specific date
 
 
-class WeekendHandling(str, Enum):
+class WeekendHandling(StrEnum):
     """How to handle scheduled transactions that fall on weekends."""
 
     SAME_DAY = "same_day"  # Execute on weekend
