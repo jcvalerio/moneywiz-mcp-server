@@ -42,7 +42,7 @@ git checkout -b docs/update-description
 uv sync --all-extras
 
 # Run setup
-python setup_env.py
+uv run python setup_env.py
 
 # Make your changes and test them
 uv run pytest tests/

@@ -10,43 +10,23 @@ import os
 from pathlib import Path
 import sys
 
+try:
+    from moneywiz_mcp_server.config import find_moneywiz_databases
+except ImportError:
+    print("❌ Could not import moneywiz_mcp_server. Run this script with:")
+    print("   uv run python setup_env.py")
+    sys.exit(1)
+
 
 def find_moneywiz_database() -> list[Path]:
-    """Find MoneyWiz database on macOS."""
+    """Find candidate MoneyWiz databases on macOS, best match first."""
     # Verify we're on macOS
     if os.name != "posix" or not hasattr(os, "uname") or os.uname().sysname != "Darwin":
         print("❌ MoneyWiz MCP Server only supports macOS.")
         print("   MoneyWiz is only available on macOS, iOS, and iPadOS.")
         sys.exit(1)
 
-    home = Path.home()
-    possible_paths = [
-        # MoneyWiz 3 locations (including Setapp version)
-        home / "Library/Containers/com.moneywiz.mac/Data/Documents",
-        home / "Library/Containers/com.moneywiz.personalfinance/Data/Documents",
-        home / "Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents",
-        home / "Library/Application Support/MoneyWiz",
-        # MoneyWiz 2 locations
-        home / "Library/Application Support/SilverWiz/MoneyWiz 2",
-    ]
-
-    # Search for database files
-    found_databases = []
-    for base_path in possible_paths:
-        if not base_path.exists():
-            continue
-
-        # Look for SQLite database files
-        for pattern in ["*.sqlite", "*.sqlite3", "*.db"]:
-            found_databases.extend(
-                [
-                    db_file
-                    for db_file in base_path.glob(pattern)
-                    if db_file.is_file() and db_file.stat().st_size > 0
-                ]
-            )
-
-    return found_databases
+    return find_moneywiz_databases()
 
 
 def create_env_file() -> None:
@@ -80,6 +60,9 @@ def create_env_file() -> None:
         print("❌ No MoneyWiz databases found automatically.")
         print("\nPlease locate your MoneyWiz database manually.")
         print("Common locations on macOS:")
+        print(
+            "  - ~/Library/Containers/com.moneywiz.*/Data/Library/Application Support/"
+        )
         print("  - ~/Library/Containers/com.moneywiz.*/Data/Documents/")
         print("  - ~/Library/Application Support/MoneyWiz/")
 
