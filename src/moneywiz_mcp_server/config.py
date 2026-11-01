@@ -52,7 +52,8 @@ def _is_candidate_database(path: Path) -> bool:
         return False
     try:
         return path.is_file() and path.stat().st_size > 0
-    except OSError:
+    except OSError as e:
+        logger.debug(f"Skipping {path}: {e.strerror or e}")
         return False
 
 

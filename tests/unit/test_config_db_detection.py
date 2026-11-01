@@ -180,10 +180,11 @@ class TestFindMoneyWizDatabases:
         assert "Cannot read" in caplog.text
 
     @pytest.mark.unit
-    def test_setup_env_uses_same_detection(self, tmp_path):
+    def test_setup_env_uses_same_detection(self, tmp_path, request):
         _make(tmp_path, APP_SUPPORT, "MoneyWiz_iCloud_shared.sqlite")
         real = _make(tmp_path, APP_SUPPORT, "MoneyWiz_iCloud.sqlite")
-        script = Path(__file__).resolve().parents[2] / "setup_env.py"
+        script = request.config.rootpath / "setup_env.py"
+        assert script.is_file(), f"setup_env.py not found at {script}"
         spec = importlib.util.spec_from_file_location("setup_env", script)
         assert spec is not None
         assert spec.loader is not None
