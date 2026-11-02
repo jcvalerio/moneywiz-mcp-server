@@ -19,6 +19,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ### Fixed
 
+- Time period phrases are parsed with a real grammar. Previously, unsupported phrases such as "last 5 years" silently fell back to 3 months, "last 13 months" became 3 months and "last 60 days" became 7 days, because the parser matched substrings. Supported: `last N days|weeks|months|years`, `last week|month|year`, `this week|month|year`, `year to date`, `today`, `yesterday`, and `all time`; months and years use calendar arithmetic. Unsupported phrases now return an error listing the supported formats.
 - Dates are now converted using the Core Data reference date in UTC. Previously every conversion applied the machine's UTC offset, so outside UTC, searches and budget, scheduled, and category date ranges were shifted by that many hours (west of UTC, recent transactions were missing from results) and transaction dates showed UTC clock time, putting evening entries on the next day.
 - Package `__version__` now reflects installed distribution metadata instead of a hardcoded value.
 - Database auto-detection now finds the database under `Data/Library/Application Support`, where MoneyWiz stores it once iCloud sync is enabled, and skips the always-empty CloudKit shared-scope store kept alongside it.

@@ -189,7 +189,9 @@ async def search_transactions(
     Search and filter transactions with natural language time periods.
 
     Args:
-        time_period: Natural language time period (e.g., 'last 3 months', 'this year')
+        time_period: 'last N days|weeks|months|years', 'last week|month|year',
+            'this week|month|year', 'year to date', 'today', 'yesterday',
+            or 'all time'
         account_ids: Optional list of account IDs to filter by
         categories: Optional list of category names to filter by
         transaction_type: Optional transaction type filter
@@ -210,12 +212,8 @@ async def search_transactions(
                 parse_natural_language_date,
             )
 
-            # Parse the time period for metadata
             date_range = parse_natural_language_date(time_period)
-
-            # Use transaction service directly
             transaction_service = TransactionService(db_manager)
-            date_range = parse_natural_language_date(time_period)
 
             logger.info(
                 f"📅 Date range: {date_range.start_date} to {date_range.end_date}"
@@ -291,7 +289,9 @@ async def analyze_expenses_by_category(
     Analyze expenses by category to identify spending patterns.
 
     Args:
-        time_period: Natural language time period (e.g., 'last 3 months', 'this year')
+        time_period: 'last N days|weeks|months|years', 'last week|month|year',
+            'this week|month|year', 'year to date', 'today', 'yesterday',
+            or 'all time'
         top_categories: Number of top categories to analyze (1-50)
 
     Returns:
@@ -415,7 +415,9 @@ async def analyze_income_vs_expenses(
     Analyze income vs expenses to understand savings rate and financial health.
 
     Args:
-        time_period: Natural language time period (e.g., 'last 3 months', 'this year')
+        time_period: 'last N days|weeks|months|years', 'last week|month|year',
+            'this week|month|year', 'year to date', 'today', 'yesterday',
+            or 'all time'
 
     Returns:
         Income vs expense analysis with savings insights
@@ -497,8 +499,9 @@ async def get_savings_recommendations(
     Get personalized savings optimization recommendations.
 
     Args:
-        time_period: Natural language time period for analysis
-            (e.g., 'last 3 months', 'this year')
+        time_period: 'last N days|weeks|months|years', 'last week|month|year',
+            'this week|month|year', 'year to date', 'today', 'yesterday',
+            or 'all time'
         target_savings_rate: Target savings rate percentage (default 20%)
 
     Returns:
