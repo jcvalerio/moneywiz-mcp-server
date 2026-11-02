@@ -14,6 +14,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ### Added
 
+- `tools/moneywiz-snapshot`: a least-privilege way to give the server access on macOS. A single-purpose helper, run by launchd, copies the MoneyWiz database to a private snapshot; only that helper needs Full Disk Access, so Claude Desktop and the MCP server need none.
 - Claude Desktop configuration example for running the published PyPI package with `uvx`.
 
 ### Fixed

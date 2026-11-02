@@ -172,7 +172,11 @@ With iCloud sync enabled the search also returns `MoneyWiz_iCloud_shared.sqlite`
 
 Auto-detection skips that shared store and SQLite side files (`-wal`, `-shm`), and prefers files named after MoneyWiz over other SQLite files in the same folders. If more than one candidate is found, it logs how many and uses the best match; set `MONEYWIZ_DB_PATH` to choose a different one.
 
-If the logs show `Cannot read ...: Operation not permitted`, macOS privacy controls are blocking access to the MoneyWiz container. Grant **Full Disk Access** (System Settings → Privacy & Security) to the app that runs the server, such as Claude Desktop or your terminal, or set `MONEYWIZ_DB_PATH` directly.
+### macOS Privacy Controls (`Operation not permitted` / `unable to open database file`)
+
+macOS blocks other apps from reading MoneyWiz's container, so Claude Desktop usually cannot open the database directly. Avoid granting **Full Disk Access** to Claude Desktop or your terminal: every MCP server they launch would inherit access to your Mail, Messages, and all other app data.
+
+Instead, use the [least-privilege snapshot helper](tools/moneywiz-snapshot/README.md). A single-purpose binary, the only component with Full Disk Access, copies the MoneyWiz database to a private snapshot every 15 minutes, and the server reads that snapshot with no special permissions.
 
 ## 🖥️ Claude Desktop Setup
 
