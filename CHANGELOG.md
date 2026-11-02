@@ -19,6 +19,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ### Fixed
 
+- Dates are now converted using the Core Data reference date in UTC. Previously every conversion applied the machine's UTC offset, so outside UTC, searches and budget, scheduled, and category date ranges were shifted by that many hours (west of UTC, recent transactions were missing from results) and transaction dates showed UTC clock time, putting evening entries on the next day.
 - Package `__version__` now reflects installed distribution metadata instead of a hardcoded value.
 - Database auto-detection now finds the database under `Data/Library/Application Support`, where MoneyWiz stores it once iCloud sync is enabled, and skips the always-empty CloudKit shared-scope store kept alongside it.
 - Database auto-detection no longer selects SQLite side files (`-wal`, `-shm`, `-journal`), ranks MoneyWiz-named files ahead of unrelated SQLite stores, and logs a warning instead of silently skipping directories that macOS privacy controls block.

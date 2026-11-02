@@ -16,6 +16,10 @@ from moneywiz_mcp_server.models.budget import (
     BudgetVsActualResponse,
 )
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+from moneywiz_mcp_server.utils.date_utils import (
+    core_data_timestamp_to_datetime,
+    datetime_to_core_data_timestamp,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +157,7 @@ class BudgetService:
             created_date = None
             creation_ts = record.get("ZOBJECTCREATIONDATE")
             if creation_ts:
-                created_date = self._core_data_timestamp_to_datetime(creation_ts)
+                created_date = core_data_timestamp_to_datetime(creation_ts)
 
             # Build category name for display
             name = None
@@ -223,7 +227,7 @@ class BudgetService:
             # Get current month date range for filtering
             now = datetime.now()
             start_of_month = datetime(now.year, now.month, 1)
-            start_ts = self._datetime_to_core_data_timestamp(start_of_month)
+            start_ts = datetime_to_core_data_timestamp(start_of_month)
 
             query = """
                 SELECT
@@ -532,16 +536,3 @@ class BudgetService:
                 "overall_variance_percentage": 0.0,
             },
         }
-
-    def _core_data_timestamp_to_datetime(self, timestamp: float) -> datetime:
-        """Convert Core Data timestamp to datetime.
-
-        Core Data uses January 1, 2001 as the reference date.
-        """
-        core_data_epoch = datetime(2001, 1, 1)
-        return core_data_epoch + timedelta(seconds=timestamp)
-
-    def _datetime_to_core_data_timestamp(self, dt: datetime) -> float:
-        """Convert datetime to Core Data timestamp."""
-        core_data_epoch = datetime(2001, 1, 1)
-        return (dt - core_data_epoch).total_seconds()

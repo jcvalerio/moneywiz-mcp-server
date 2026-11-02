@@ -1,6 +1,6 @@
 """Unit tests for BudgetService."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -156,19 +156,6 @@ class TestBudgetServiceHelpers:
         assert budget_service.DURATION_UNITS[2] == BudgetPeriod.WEEKLY
         assert budget_service.DURATION_UNITS[4] == BudgetPeriod.YEARLY
         assert budget_service.DURATION_UNITS[8] == BudgetPeriod.MONTHLY
-
-    def test_core_data_timestamp_conversion(self, budget_service):
-        """Test Core Data timestamp conversion."""
-        # Core Data epoch is Jan 1, 2001
-        timestamp = 0.0
-        result = budget_service._core_data_timestamp_to_datetime(timestamp)
-        assert result == datetime(2001, 1, 1)
-
-    def test_datetime_to_core_data_timestamp(self, budget_service):
-        """Test datetime to Core Data timestamp conversion."""
-        dt = datetime(2001, 1, 1)
-        result = budget_service._datetime_to_core_data_timestamp(dt)
-        assert result == 0.0
 
     def test_generate_recommendations_over_budget(self, budget_service):
         """Test recommendations for over budget scenarios."""

@@ -3,6 +3,19 @@
 from datetime import datetime, timedelta
 
 from moneywiz_mcp_server.models.transaction import DateRange
+from moneywiz_mcp_server.utils.core_data_time import (
+    core_data_timestamp_to_datetime,
+    datetime_to_core_data_timestamp,
+)
+
+__all__ = [
+    "core_data_timestamp_to_datetime",
+    "datetime_to_core_data_timestamp",
+    "format_date_range_for_display",
+    "get_date_range_from_days",
+    "get_date_range_from_months",
+    "parse_natural_language_date",
+]
 
 
 def get_date_range_from_months(months: int) -> DateRange:
@@ -85,37 +98,6 @@ def parse_natural_language_date(text: str) -> DateRange:
     else:
         # Default to last 3 months
         return get_date_range_from_months(3)
-
-
-def core_data_timestamp_to_datetime(timestamp: float) -> datetime:
-    """
-    Convert Core Data timestamp to Python datetime.
-
-    Core Data uses NSDate which counts seconds since 2001-01-01 00:00:00 UTC.
-
-    Args:
-        timestamp: Core Data timestamp
-
-    Returns:
-        Python datetime object
-    """
-    # NSDate epoch: January 1, 2001 00:00:00 UTC
-    nsdate_epoch = datetime(2001, 1, 1)
-    return datetime.fromtimestamp(nsdate_epoch.timestamp() + timestamp)
-
-
-def datetime_to_core_data_timestamp(dt: datetime) -> float:
-    """
-    Convert Python datetime to Core Data timestamp.
-
-    Args:
-        dt: Python datetime object
-
-    Returns:
-        Core Data timestamp
-    """
-    nsdate_epoch = datetime(2001, 1, 1)
-    return dt.timestamp() - nsdate_epoch.timestamp()
 
 
 def format_date_range_for_display(date_range: DateRange) -> str:
