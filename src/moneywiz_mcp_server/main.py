@@ -10,6 +10,7 @@ from typing import Any
 
 from mcp.server import FastMCP
 
+from . import __version__
 from .config import Config
 from .database.connection import DatabaseManager
 from .models.budget import (
@@ -70,6 +71,12 @@ load_env_file()
 
 # Create FastMCP server instance
 mcp = FastMCP("moneywiz-mcp-server")
+
+# FastMCP 1.x has no version argument, so the MCP handshake reported the mcp
+# SDK's version instead of ours. The low-level server reports `version` when
+# it is set. tests/unit/test_server_version.py checks the real handshake, so a
+# change in the SDK is caught; revisit when migrating to mcp 2.x.
+mcp._mcp_server.version = __version__
 
 # Module-level config storage for tools
 _config: Config | None = None
