@@ -1,57 +1,80 @@
 #!/bin/bash
-# Local CI Simulation Script
-# Runs the exact same checks that GitHub Actions CI runs
-# This ensures local and CI environments are perfectly aligned
+# Local CI simulation: runs the same commands, with the same flags, as
+# .github/workflows/ci.yml. Every step is blocking, exactly like CI.
+#
+# Usage:
+#   scripts/check-ci.sh          all CI jobs
+#   scripts/check-ci.sh --fast   skip the slower jobs (pre-commit over all
+#                                files, package build check); used by the
+#                                pre-push hook
+#
+# Keep in sync with .github/workflows/ci.yml when either changes.
 
-set -e  # Exit on any error
+set -euo pipefail
 
-echo "🚀 Running Local CI Simulation..."
-echo "This runs the exact same commands as GitHub Actions CI"
-echo
+FAST=0
+case "${1:-}" in
+  "") ;;
+  --fast) FAST=1 ;;
+  *) echo "usage: $0 [--fast]" >&2; exit 2 ;;
+esac
 
-# Change to project root
 cd "$(dirname "$0")/.."
 
-echo "📋 Step 1: Installing dependencies"
-uv sync --all-extras > /dev/null 2>&1
-echo "✅ Dependencies installed"
-echo
+CURRENT_STEP=""
+trap 'echo; echo "❌ Failed: $CURRENT_STEP" >&2' ERR
 
-echo "🔍 Step 2: Ruff Linter (exact CI command)"
-echo "Running: ruff check . --output-format=github"
+step() {
+  CURRENT_STEP="$1"
+  echo
+  echo "▶ $1"
+}
+
+echo "🚀 Local CI simulation (same commands as GitHub Actions)"
+
+step "Install dependencies"
+uv sync --all-extras >/dev/null
+
+# --- Code Quality job ---
+step "Ruff linter"
 uv run ruff check . --output-format=github
-echo "✅ Ruff linting passed"
-echo
 
-echo "✨ Step 3: Ruff Formatter (exact CI command)"
-echo "Running: ruff format --check ."
+step "Ruff formatter"
 uv run ruff format --check .
-echo "✅ Ruff formatting passed"
-echo
 
-echo "🔒 Step 4: Mypy Type Checking (non-blocking, same as CI)"
-echo "Running: mypy src/"
-if uv run mypy src/; then
-    echo "✅ Mypy type checking passed"
-else
-    echo "⚠️  Mypy has warnings (non-blocking, same as CI)"
+# CI also passes --install-types --non-interactive; that only tries to
+# pip-install missing stub packages (uv environments have no pip), so it does
+# not change the result. --no-strict-optional does, so it must match.
+step "Mypy (CI flags: --no-strict-optional)"
+uv run mypy src/ --no-strict-optional
+
+step "Bandit"
+uv run bandit -r src/
+
+# --- Test job ---
+step "Tests (all, excluding integration)"
+uv run pytest --cov=moneywiz_mcp_server --cov-report=xml --cov-report=term-missing -m "not integration"
+
+# --- Integration Test job ---
+step "Integration tests"
+uv run pytest tests/integration/ -v --tb=short
+
+if [ "$FAST" -eq 0 ]; then
+  # --- Pre-commit job ---
+  step "Pre-commit hooks (all files)"
+  uv run pre-commit run --all-files
+
+  # --- Build Package job (built in a temporary directory) ---
+  step "Build package and check metadata"
+  build_dir="$(mktemp -d)"
+  trap 'rm -rf -- "${build_dir:?}"' EXIT
+  uv build --out-dir "$build_dir" >/dev/null
+  uvx twine check "$build_dir"/*
 fi
-echo
 
-echo "🛡️  Step 5: Bandit Security Check"
-echo "Running: bandit -r src/"
-if uv run bandit -r src/ > /dev/null 2>&1; then
-    echo "✅ Bandit security check passed"
+echo
+if [ "$FAST" -eq 1 ]; then
+  echo "✅ Fast checks passed (pre-commit and package build skipped)"
 else
-    echo "⚠️  Bandit has security warnings"
+  echo "✅ All CI checks passed"
 fi
-echo
-
-echo "🧪 Step 6: Unit Tests (excluding integration)"
-echo "Running: pytest tests/unit/ -m 'not integration'"
-uv run pytest tests/unit/ -m "not integration" --tb=short
-echo "✅ Unit tests passed"
-echo
-
-echo "🎉 All CI checks completed successfully!"
-echo "Your code should pass GitHub Actions CI"

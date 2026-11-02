@@ -26,11 +26,12 @@ Claude Desktop → MCP server (MONEYWIZ_DB_PATH = snapshot)  ← no extra permis
 - **Paths are compiled in.** The helper takes no arguments and reads no
   configuration or environment variables. `build.sh` only accepts known
   MoneyWiz locations.
-- **No symlinks.** The source is opened read-only and SQLite refuses any
-  symlink in its path; the helper also refuses symlinked `-wal`, `-shm`, and
-  `-journal` files, which SQLite would otherwise open without that check, so a link planted in place of the database cannot
-  redirect the copy to another app's data. The snapshot folder must be a real,
-  owner-only directory.
+- **No symlinks.** The source is opened read-only, and SQLite refuses a
+  symlink anywhere in its path. SQLite does not apply that check to the
+  `-wal`, `-shm`, and `-journal` files it opens alongside the database, so the
+  helper refuses symlinks there itself. A link planted in place of any of
+  these files cannot redirect the copy to another app's data. The snapshot
+  folder must be a real, owner-only directory.
 - **launchd runs the binary directly.** There is no shell script in between,
   so macOS attributes the read to the helper and not to `/bin/bash` (which
   would otherwise need Full Disk Access for every script it runs).

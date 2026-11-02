@@ -21,7 +21,7 @@ MoneyWiz MCP Server is a Model Context Protocol (MCP) server that provides secur
 
 ## Technology Stack
 
-- **Language**: Python 3.10+
+- **Language**: Python 3.11+
 - **MCP Framework**: Official Python MCP SDK
 - **Database**: Direct SQLite access to MoneyWiz Core Data
 - **Async Support**: aiosqlite for non-blocking database operations

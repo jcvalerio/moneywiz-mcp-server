@@ -276,10 +276,14 @@ done:
         sqlite3_backup_finish(backup);
     }
     if (dst != NULL && sqlite3_close(dst) != SQLITE_OK) {
-        log_msg("error", "cannot close snapshot cleanly");
+        log_msg("error", "cannot close snapshot cleanly: %s", sqlite3_errmsg(dst));
         status = -1;
     }
-    sqlite3_close(src);
+    /* Read-only with no open statements, so a failed close cannot lose data;
+     * log it anyway so a leaked handle is visible. */
+    if (src != NULL && sqlite3_close(src) != SQLITE_OK) {
+        log_msg("warning", "cannot close source database cleanly: %s", sqlite3_errmsg(src));
+    }
     return status;
 }
 
