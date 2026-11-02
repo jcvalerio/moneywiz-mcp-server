@@ -383,9 +383,17 @@ def test_build_script_rejects_symlinked_snapshot_directory(tmp_path):
     ],
 )
 def test_install_script_rejects_bad_interval(tmp_path, interval, message):
-    # Validation runs before build.sh or launchctl, so nothing is installed
+    # install.sh talks to the user's real launchd domain (gui/<uid>), so the
+    # test shadows launchctl with a stub; if validation ever regresses, the
+    # stub records the call instead of replacing the user's real agent.
     home = tmp_path / "home"
     home.mkdir()
+    stub_dir = tmp_path / "stub-bin"
+    stub_dir.mkdir()
+    calls = tmp_path / "launchctl-calls"
+    stub = stub_dir / "launchctl"
+    stub.write_text(f'#!/bin/sh\necho "$@" >> "{calls}"\n')
+    stub.chmod(0o755)
     result = subprocess.run(
         [
             "/bin/bash",
@@ -396,9 +404,10 @@ def test_install_script_rejects_bad_interval(tmp_path, interval, message):
         capture_output=True,
         text=True,
         check=False,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        env={"HOME": str(home), "PATH": f"{stub_dir}:/usr/bin:/bin"},
     )
 
     assert result.returncode == 1
     assert message in result.stderr
     assert list(home.iterdir()) == []
+    assert not calls.exists(), "install.sh reached launchctl"
