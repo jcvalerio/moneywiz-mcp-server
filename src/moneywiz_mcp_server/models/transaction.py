@@ -6,6 +6,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from moneywiz_mcp_server.utils.core_data_time import core_data_timestamp_to_datetime
+
 
 class TransactionType(Enum):
     """Transaction types based on MoneyWiz Core Data entities."""
@@ -119,10 +121,7 @@ class TransactionModel:
         # Convert date (Core Data timestamp to Python datetime)
         date_timestamp = row.get("ZDATE1", 0)
         if date_timestamp:
-            # Core Data uses NSDate which is seconds since 2001-01-01
-            base_date = datetime(2001, 1, 1)
-            date = base_date.timestamp() + date_timestamp
-            transaction_date = datetime.fromtimestamp(date)
+            transaction_date = core_data_timestamp_to_datetime(date_timestamp)
         else:
             transaction_date = datetime.now()
 

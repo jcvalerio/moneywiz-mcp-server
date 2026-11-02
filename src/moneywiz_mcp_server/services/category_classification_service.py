@@ -11,6 +11,7 @@ from typing import Any, assert_never
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.transaction import TransactionType
+from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -456,10 +457,8 @@ class CategoryClassificationService:
             HAVING COUNT(*) >= 2  -- Minimum transactions for analysis
             """  # nosec: B608 - safe placeholder substitution
 
-            # Calculate timestamp for 12 months ago (Core Data uses seconds since 2001-01-01)
             twelve_months_ago = datetime.now() - timedelta(days=365)
-            base_date = datetime(2001, 1, 1)
-            timestamp_12_months_ago = (twelve_months_ago - base_date).total_seconds()
+            timestamp_12_months_ago = datetime_to_core_data_timestamp(twelve_months_ago)
 
             results = await self.db_manager.execute_query(
                 analysis_query, (*entity_roles.keys(), timestamp_12_months_ago)
