@@ -7,7 +7,7 @@ income vs expense categories without relying on hardcoded values.
 from datetime import datetime, timedelta
 from enum import Enum
 import logging
-from typing import Any
+from typing import Any, assert_never
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.transaction import TransactionType
@@ -343,24 +343,25 @@ class CategoryClassificationService:
 
             # Map entity roles to classifications
             role = entity_roles.get(entity_type)
-            if role == ClassificationEntityRole.DEPOSIT:
+            if role is None:
+                return CategoryType.UNKNOWN
+            if role is ClassificationEntityRole.DEPOSIT:
                 return (
                     CategoryType.INCOME
                     if positive_ratio > 0.7
                     else CategoryType.UNKNOWN
                 )
-            elif role == ClassificationEntityRole.WITHDRAW:
+            if role is ClassificationEntityRole.WITHDRAW:
                 return (
                     CategoryType.EXPENSE
                     if positive_ratio < 0.3
                     else CategoryType.UNKNOWN
                 )
-            elif role == ClassificationEntityRole.TRANSFER:
+            if role is ClassificationEntityRole.TRANSFER:
                 return CategoryType.TRANSFER
-            elif role == ClassificationEntityRole.RECONCILE:
+            if role is ClassificationEntityRole.RECONCILE:
                 return CategoryType.ADJUSTMENT
-            else:
-                return CategoryType.UNKNOWN
+            assert_never(role)
 
         except Exception as e:
             logger.warning(
