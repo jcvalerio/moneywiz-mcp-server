@@ -157,7 +157,7 @@ class BudgetService:
             created_date = None
             creation_ts = record.get("ZOBJECTCREATIONDATE")
             if creation_ts:
-                created_date = self._core_data_timestamp_to_datetime(creation_ts)
+                created_date = core_data_timestamp_to_datetime(creation_ts)
 
             # Build category name for display
             name = None
@@ -227,7 +227,7 @@ class BudgetService:
             # Get current month date range for filtering
             now = datetime.now()
             start_of_month = datetime(now.year, now.month, 1)
-            start_ts = self._datetime_to_core_data_timestamp(start_of_month)
+            start_ts = datetime_to_core_data_timestamp(start_of_month)
 
             query = """
                 SELECT
@@ -536,14 +536,3 @@ class BudgetService:
                 "overall_variance_percentage": 0.0,
             },
         }
-
-    def _core_data_timestamp_to_datetime(self, timestamp: float) -> datetime:
-        """Convert Core Data timestamp to datetime.
-
-        Core Data uses January 1, 2001 as the reference date.
-        """
-        return core_data_timestamp_to_datetime(timestamp)
-
-    def _datetime_to_core_data_timestamp(self, dt: datetime) -> float:
-        """Convert datetime to Core Data timestamp."""
-        return datetime_to_core_data_timestamp(dt)

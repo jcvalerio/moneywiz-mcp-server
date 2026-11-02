@@ -163,18 +163,6 @@ class TestScheduledTransactionService:
         # Check that salary amount is properly set
         assert result["salary_amount"]["USD"] == salary_amount
 
-    def test_core_data_timestamp_conversion(self, scheduled_service):
-        """Test Core Data timestamp to datetime conversion."""
-        # Core Data timestamp for a known date
-        timestamp = 741744000.0  # This is approximately July 2024
-
-        result = scheduled_service._core_data_timestamp_to_datetime(timestamp)
-
-        assert isinstance(result, datetime)
-        assert (
-            result.year >= 2024
-        )  # Should be in the future relative to Core Data epoch
-
     def test_infer_recurrence_pattern(self, scheduled_service):
         """Test recurrence pattern inference from database record."""
         # Test monthly pattern (ZDURATIONUNITS1 = 8)

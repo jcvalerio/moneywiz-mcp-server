@@ -12,10 +12,6 @@ import time
 import pytest
 
 from moneywiz_mcp_server.models.transaction import TransactionModel
-from moneywiz_mcp_server.services.budget_service import BudgetService
-from moneywiz_mcp_server.services.scheduled_transaction_service import (
-    ScheduledTransactionService,
-)
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
@@ -47,6 +43,9 @@ def local_timezone() -> Iterator[Callable[[str], None]]:
 
 
 @pytest.mark.unit
+@pytest.mark.skipif(
+    not hasattr(time, "tzset"), reason="time.tzset is only available on Unix"
+)
 class TestCoreDataTimestamps:
     def test_local_evening_maps_to_next_utc_day(self, local_timezone):
         # A transaction entered at 19:36:16 in Costa Rica (UTC-6) on Nov 1 is
@@ -93,14 +92,3 @@ class TestCoreDataTimestamps:
         transaction = TransactionModel.from_raw_data({"Z_PK": 1, "ZDATE1": stored})
 
         assert transaction.date == datetime(2026, 11, 1, 19, 36, 16)
-
-    def test_services_share_the_corrected_conversion(self, local_timezone):
-        local_timezone("America/Costa_Rica")
-        budget = BudgetService(db_manager=None)  # type: ignore[arg-type]
-        scheduled = ScheduledTransactionService(db_manager=None)  # type: ignore[arg-type]
-        local = datetime(2026, 11, 1, 19, 36, 16)
-        stored = datetime_to_core_data_timestamp(local)
-
-        assert budget._datetime_to_core_data_timestamp(local) == stored
-        assert budget._core_data_timestamp_to_datetime(stored) == local
-        assert scheduled._core_data_timestamp_to_datetime(stored) == local

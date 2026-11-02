@@ -157,20 +157,6 @@ class TestBudgetServiceHelpers:
         assert budget_service.DURATION_UNITS[4] == BudgetPeriod.YEARLY
         assert budget_service.DURATION_UNITS[8] == BudgetPeriod.MONTHLY
 
-    def test_core_data_timestamp_conversion(self, budget_service):
-        """Test Core Data timestamp conversion."""
-        # Core Data epoch is 2001-01-01 UTC; the result is naive local time
-        timestamp = 0.0
-        result = budget_service._core_data_timestamp_to_datetime(timestamp)
-        expected = datetime(2001, 1, 1, tzinfo=UTC).astimezone().replace(tzinfo=None)
-        assert result == expected
-
-    def test_datetime_to_core_data_timestamp(self, budget_service):
-        """Test datetime to Core Data timestamp conversion."""
-        dt = datetime(2001, 1, 1, tzinfo=UTC)
-        result = budget_service._datetime_to_core_data_timestamp(dt)
-        assert result == 0.0
-
     def test_generate_recommendations_over_budget(self, budget_service):
         """Test recommendations for over budget scenarios."""
         budgets = [

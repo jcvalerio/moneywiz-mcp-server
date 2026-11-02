@@ -208,16 +208,14 @@ class ScheduledTransactionService:
                 return None
 
             # Convert Core Data timestamps to datetime
-            next_execution_date = self._core_data_timestamp_to_datetime(
-                next_date_timestamp
-            )
+            next_execution_date = core_data_timestamp_to_datetime(next_date_timestamp)
 
             # Get creation date
             created_timestamp = record.get("ZCREATIONDATE1") or record.get(
                 "ZOBJECTCREATIONDATE"
             )
             created_date = (
-                self._core_data_timestamp_to_datetime(created_timestamp)
+                core_data_timestamp_to_datetime(created_timestamp)
                 if created_timestamp
                 else datetime.now()
             )
@@ -324,10 +322,6 @@ class ScheduledTransactionService:
             return False
 
         return True
-
-    def _core_data_timestamp_to_datetime(self, timestamp: float) -> datetime:
-        """Convert Core Data timestamp to Python datetime."""
-        return core_data_timestamp_to_datetime(timestamp)
 
     def _infer_recurrence_pattern_from_duration(
         self, record: dict[str, Any]
