@@ -17,10 +17,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12.7"  # Pin exact version for reproducibility
-  MINIMUM_PYTHON_VERSION: "3.11"
-  RUFF_VERSION: "0.12.4"  # Pin exact Ruff version to match local
-  MYPY_VERSION: "1.17.0"   # Pin exact MyPy version
-  BANDIT_VERSION: "1.8.6"  # Pin exact Bandit version
+  # Tool versions (ruff, mypy, bandit, pytest) come from uv.lock.
 
 jobs:
   # Code Quality Checks
