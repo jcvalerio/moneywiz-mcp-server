@@ -502,7 +502,6 @@ async def get_savings_recommendations(
         time_period: 'last N days|weeks|months|years', 'last week|month|year',
             'this week|month|year', 'year to date', 'today', 'yesterday',
             or 'all time'
-            (e.g., 'last 3 months', 'this year')
         target_savings_rate: Target savings rate percentage (default 20%)
 
     Returns:
