@@ -90,7 +90,7 @@ For day-to-day use, prefer a tagged stable release once one is published. This k
 ```bash
 # From an existing source checkout
 git fetch --tags
-git checkout v1.0.0
+git checkout v2.0.0
 uv sync --all-extras
 uv run python setup_env.py
 ```
@@ -237,7 +237,7 @@ Then configure Claude Desktop. Pin the package version for stable behavior, and 
       "args": [
         "x",
         "--from",
-        "moneywiz-mcp-server==1.0.1",
+        "moneywiz-mcp-server==2.0.0",
         "moneywiz-mcp-server"
       ],
       "env": {
@@ -249,7 +249,9 @@ Then configure Claude Desktop. Pin the package version for stable behavior, and 
 }
 ```
 
-If you prefer to use the newest published package instead of a pinned version, remove `==1.0.1`. Pinned versions are recommended for day-to-day use.
+If you prefer to use the newest published package instead of a pinned version, remove `==2.0.0`. Pinned versions are recommended for day-to-day use.
+
+On macOS, Claude Desktop usually cannot read MoneyWiz's data folder directly (`unable to open database file`). Rather than granting Claude Desktop Full Disk Access, set `MONEYWIZ_DB_PATH` to a snapshot kept by the [least-privilege snapshot helper](tools/moneywiz-snapshot/README.md), which is installed from a source checkout.
 
 ### 3. Restart Claude Desktop
 

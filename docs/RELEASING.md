@@ -107,6 +107,7 @@ uv sync --all-extras
 
 ### 2. Run local checks
 
+- [ ] Run `scripts/check-ci.sh`, which runs every CI job with CI's commands, or run the individual checks below.
 - [ ] Run linting:
 
   ```bash

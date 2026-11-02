@@ -6,6 +6,31 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+## 2.0.0 - 2026-11-02
+
+Major release that corrects data 1.0.x returned incorrectly. On current MoneyWiz 3 databases, 1.0.1 computed account balances from transfers only, looked up categories, payees, budgets, and tags in the wrong records, shifted dates by the machine's UTC offset, and misread most time-period phrases, all without errors. The corrections change financial results and date ranges for the same inputs, and Python 3.10 support is dropped, so this is a major version under the [versioning policy](docs/RELEASING.md#versioning-policy).
+
+### Compatibility notes
+
+- **Breaking changes:**
+  - Python 3.11 or newer is required.
+  - Financial results differ from 1.0.x for the same inputs: balances, categories, payees, budgets, scheduled transactions, and tags are now read correctly (see Fixed).
+  - Dates are in local time, and date ranges are no longer shifted by the UTC offset.
+  - `time_period` phrases are interpreted as written, and unsupported phrases return an error instead of silently using 3 months.
+- **MCP tool schema changes:** none. Tool names, arguments, defaults, and response fields are unchanged; the `time_period` descriptions now list the supported phrases.
+- **Configuration changes:** none required. On macOS, if Claude Desktop cannot open the database, use the optional snapshot helper and point `MONEYWIZ_DB_PATH` at its snapshot.
+
+### Upgrade notes
+
+- Source checkout: `git fetch --tags && git checkout v2.0.0 && uv sync --all-extras`, then restart Claude Desktop.
+- PyPI with `uvx`: change the pinned version to `moneywiz-mcp-server==2.0.0` and restart Claude Desktop.
+- Expect different numbers than 1.0.x; the new values match the MoneyWiz app.
+
+### Rollback
+
+- Source checkout: `git checkout v1.0.1 && uv sync --all-extras`.
+- PyPI with `uvx`: pin `moneywiz-mcp-server==1.0.1`.
+
 ### Changed
 
 - **Breaking:** Python 3.11 is now the minimum supported version. Python 3.10 reached end of life on 2026-10-01, and patched releases of some dependencies no longer support it. Python 3.13 is now tested in CI.
@@ -25,7 +50,13 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 - Database auto-detection now finds the database under `Data/Library/Application Support`, where MoneyWiz stores it once iCloud sync is enabled, and skips the always-empty CloudKit shared-scope store kept alongside it.
 - Database auto-detection no longer selects SQLite side files (`-wal`, `-shm`, `-journal`), ranks MoneyWiz-named files ahead of unrelated SQLite stores, and logs a warning instead of silently skipping directories that macOS privacy controls block.
 - `setup_env.py` now uses the same detection logic as the server, so it finds databases relocated by iCloud sync.
-- Core Data `Z_ENT` (entity) ids are now resolved dynamically per database instead of hardcoded, fixing silently wrong or missing data (transactions, tags, account balances, categories, scheduled transactions, budgets) on databases where MoneyWiz assigned different entity ids.
+- Core Data `Z_ENT` (entity) ids are now resolved dynamically per database instead of hardcoded, fixing silently wrong or missing data (transactions, tags, account balances, categories, scheduled transactions, budgets) on databases where MoneyWiz assigned different entity ids, including current MoneyWiz 3 databases. Account balances now include every transaction type (deposits, withdrawals, transfers, refunds, reconciliations, investment, and budget transfers).
+
+### Development
+
+- `scripts/check-ci.sh` runs every CI job with CI's commands and flags, all blocking; `--fast` is used by the pre-push hook.
+- Pre-commit runs ruff, mypy, and bandit through `uv`, so tool versions come from `uv.lock` and match CI.
+- The Claude review workflow can post reviews again.
 
 ## 1.0.1 - 2026-05-11
 
