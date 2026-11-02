@@ -258,6 +258,26 @@ class TestSnapshotHelper:
         assert "open MoneyWiz once" in result.stderr
         assert not (dest_dir / SNAPSHOT_NAME).exists()
 
+    @pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
+    def test_refuses_symlinked_side_file(self, tmp_path, build_helper, suffix):
+        # SQLITE_OPEN_NOFOLLOW does not cover side files, so the helper checks them
+        source = tmp_path / "rollback.sqlite"
+        conn = sqlite3.connect(source)
+        conn.execute("CREATE TABLE ZSYNCOBJECT (Z_PK INTEGER PRIMARY KEY)")
+        conn.commit()
+        conn.close()
+        other = tmp_path / "other-app.db"
+        other.write_bytes(b"not MoneyWiz data")
+        Path(f"{source}{suffix}").symlink_to(other)
+        dest_dir = tmp_path / "out"
+        binary = build_helper(source, dest_dir)
+
+        result = _run(binary)
+
+        assert result.returncode == 1
+        assert "refusing symlinked side file" in result.stderr
+        assert not (dest_dir / SNAPSHOT_NAME).exists()
+
     def test_missing_source_leaves_previous_snapshot_and_no_temp_files(
         self, tmp_path, build_helper, wal_source
     ):
@@ -328,3 +348,57 @@ def test_build_script_rejects_symlink_in_source_path(tmp_path):
 
     assert result.returncode == 1
     assert "is a symlink" in result.stderr
+
+
+def test_build_script_rejects_symlinked_snapshot_directory(tmp_path):
+    home = tmp_path / "home"
+    container = home / "Library/Containers/com.moneywiz.real/Data"
+    container.mkdir(parents=True)
+    (container / "MoneyWiz.sqlite").write_bytes(b"")
+    app_support = home / "Library/Application Support"
+    app_support.mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (app_support / "moneywiz-mcp").symlink_to(elsewhere, target_is_directory=True)
+
+    result = subprocess.run(
+        ["/bin/bash", str(BUILD_SCRIPT), f"{container}/MoneyWiz.sqlite"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+    )
+
+    assert result.returncode == 1
+    assert "is a symlink" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("interval", "message"),
+    [
+        ("59", "at least 60"),
+        ("86401", "at most 86400"),
+        ("99999999", "at most 86400"),
+        ("15m", "whole number"),
+    ],
+)
+def test_install_script_rejects_bad_interval(tmp_path, interval, message):
+    # Validation runs before build.sh or launchctl, so nothing is installed
+    home = tmp_path / "home"
+    home.mkdir()
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(SOURCE_FILE.parent / "install.sh"),
+            f"{home}/Library/Containers/com.moneywiz.x/Data/MoneyWiz.sqlite",
+            interval,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+    )
+
+    assert result.returncode == 1
+    assert message in result.stderr
+    assert list(home.iterdir()) == []

@@ -100,7 +100,11 @@ static int quick_check_ok(sqlite3 *db) {
     return ok;
 }
 
-/* 1 if SNAPSHOT_SOURCE + suffix exists (size in *size), 0 if absent, -1 on error. */
+/*
+ * 1 if SNAPSHOT_SOURCE + suffix exists (size in *size), 0 if absent, -1 on
+ * error. Symlinks are refused: SQLITE_OPEN_NOFOLLOW only covers the main
+ * database file, not the -wal/-shm/-journal files SQLite opens alongside it.
+ */
 static int side_file_state(const char *suffix, off_t *size) {
     char path[PATH_MAX];
     struct stat st;
@@ -109,10 +113,18 @@ static int side_file_state(const char *suffix, off_t *size) {
         return -1;
     }
     if (lstat(path, &st) == 0) {
+        if (S_ISLNK(st.st_mode)) {
+            log_msg("error", "refusing symlinked side file %s", path);
+            return -1;
+        }
         *size = st.st_size;
         return 1;
     }
-    return errno == ENOENT ? 0 : -1;
+    if (errno != ENOENT) {
+        log_msg("error", "cannot inspect %s: %s", path, strerror(errno));
+        return -1;
+    }
+    return 0;
 }
 
 /* Build "file:<percent-encoded source path>?immutable=1". Returns 0 on success. */
@@ -173,7 +185,6 @@ static int copy_database(const char *tmp_path) {
     int wal = side_file_state("-wal", &wal_size);
     int journal = side_file_state("-journal", &journal_size);
     if (shm < 0 || wal < 0 || journal < 0) {
-        log_msg("error", "cannot inspect the source database's side files");
         return -1;
     }
 
@@ -297,7 +308,9 @@ static int full_fsync(const char *path, int flags) {
     if (rc != 0) {
         rc = fsync(fd);
     }
+    int saved_errno = errno; /* close() must not mask the flush error */
     close(fd);
+    errno = saved_errno;
     return rc;
 }
 
@@ -339,7 +352,10 @@ int main(int argc, char **argv) {
         unlink(tmp_path);
         return 1;
     }
-    full_fsync(SNAPSHOT_DEST_DIR, O_RDONLY | O_DIRECTORY);
+    if (full_fsync(SNAPSHOT_DEST_DIR, O_RDONLY | O_DIRECTORY) != 0) {
+        log_msg("warning", "snapshot is in place but its directory could not be flushed: %s",
+                strerror(errno));
+    }
 
     struct stat st;
     if (stat(final_path, &st) == 0) {

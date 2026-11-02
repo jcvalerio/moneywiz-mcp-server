@@ -27,7 +27,8 @@ Claude Desktop → MCP server (MONEYWIZ_DB_PATH = snapshot)  ← no extra permis
   configuration or environment variables. `build.sh` only accepts known
   MoneyWiz locations.
 - **No symlinks.** The source is opened read-only and SQLite refuses any
-  symlink in its path, so a link planted in place of the database cannot
+  symlink in its path; the helper also refuses symlinked `-wal`, `-shm`, and
+  `-journal` files, which SQLite would otherwise open without that check, so a link planted in place of the database cannot
   redirect the copy to another app's data. The snapshot folder must be a real,
   owner-only directory.
 - **launchd runs the binary directly.** There is no shell script in between,
@@ -60,7 +61,7 @@ the MCP server never sees a partial file. Data is at most one interval old
    ```
 
    An optional second argument sets the interval in seconds (default 900,
-   minimum 60).
+   60 to 86400).
 
 3. Grant Full Disk Access to **the installed helper only**: System Settings >
    Privacy & Security > Full Disk Access, click **+**, press **Cmd+Shift+G**,

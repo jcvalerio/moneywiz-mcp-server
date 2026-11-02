@@ -55,7 +55,7 @@ check_no_symlinks() {
   set +f
 }
 check_no_symlinks "$SOURCE"
-check_no_symlinks "$(dirname "$DEST_DIR")"
+check_no_symlinks "$DEST_DIR"
 
 mkdir -p "$BUILD_DIR"
 clang -std=c11 -O2 -Wall -Wextra -Werror -Wpedantic -Wshadow -Wformat=2 \

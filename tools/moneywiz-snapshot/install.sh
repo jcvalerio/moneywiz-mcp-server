@@ -2,6 +2,7 @@
 # Build and install the MoneyWiz snapshot helper as a per-user launchd agent.
 #
 # Usage: install.sh /absolute/path/to/MoneyWiz.sqlite [interval-seconds]
+#   interval-seconds: 60 to 86400, default 900
 #
 # After installing, grant Full Disk Access to the installed helper only (the
 # script prints its path). Neither Claude Desktop nor your terminal needs it.
@@ -25,6 +26,7 @@ case "$INTERVAL" in
   '' | *[!0-9]*) die "interval must be a whole number of seconds" ;;
 esac
 [ "$INTERVAL" -ge 60 ] || die "interval must be at least 60 seconds"
+[ "$INTERVAL" -le 86400 ] || die "interval must be at most 86400 seconds (one day)"
 
 "$TOOL_DIR/build.sh" "$1"
 
