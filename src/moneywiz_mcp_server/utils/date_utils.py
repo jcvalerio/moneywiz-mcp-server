@@ -1,6 +1,9 @@
 """Date utility functions for MoneyWiz MCP Server."""
 
 from datetime import datetime, timedelta
+import re
+
+from dateutil.relativedelta import relativedelta
 
 from moneywiz_mcp_server.models.transaction import DateRange
 from moneywiz_mcp_server.utils.core_data_time import (
@@ -8,7 +11,39 @@ from moneywiz_mcp_server.utils.core_data_time import (
     datetime_to_core_data_timestamp,
 )
 
+# MoneyWiz stores dates relative to 2001-01-01, so it holds no earlier data.
+EARLIEST_DATE = datetime(2001, 1, 1)
+
+SUPPORTED_TIME_PERIODS = (
+    "'last N days|weeks|months|years' (or 'past ...'), 'last week|month|year', "
+    "'this week|month|year', 'year to date', 'today', 'yesterday', 'all time'"
+)
+
+_RELATIVE_PERIOD = re.compile(
+    r"(?:last|past) (?:(?P<count>\d+) )?(?P<unit>day|week|month|year)s?"
+)
+
+
+def _go_back(now: datetime, count: int, unit: str) -> datetime:
+    """Return now minus count units, never earlier than EARLIEST_DATE."""
+    try:
+        if unit == "day":
+            delta = relativedelta(days=count)
+        elif unit == "week":
+            delta = relativedelta(weeks=count)
+        elif unit == "month":
+            delta = relativedelta(months=count)
+        else:
+            delta = relativedelta(years=count)
+        start = now - delta
+    except (ValueError, OverflowError):
+        return EARLIEST_DATE
+    return max(start, EARLIEST_DATE)
+
+
 __all__ = [
+    "EARLIEST_DATE",
+    "SUPPORTED_TIME_PERIODS",
     "core_data_timestamp_to_datetime",
     "datetime_to_core_data_timestamp",
     "format_date_range_for_display",
@@ -20,7 +55,7 @@ __all__ = [
 
 def get_date_range_from_months(months: int) -> DateRange:
     """
-    Create a DateRange for the last N months.
+    Create a DateRange for the last N calendar months, ending now.
 
     Args:
         months: Number of months to go back
@@ -28,10 +63,8 @@ def get_date_range_from_months(months: int) -> DateRange:
     Returns:
         DateRange covering the last N months
     """
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=months * 30)  # Approximate
-
-    return DateRange(start_date=start_date, end_date=end_date)
+    now = datetime.now()
+    return DateRange(start_date=_go_back(now, months, "month"), end_date=now)
 
 
 def get_date_range_from_days(days: int) -> DateRange:
@@ -50,54 +83,65 @@ def get_date_range_from_days(days: int) -> DateRange:
     return DateRange(start_date=start_date, end_date=end_date)
 
 
-def parse_natural_language_date(text: str) -> DateRange:
+def parse_natural_language_date(text: str, now: datetime | None = None) -> DateRange:
     """
-    Parse natural language date expressions.
+    Parse a time period phrase into a DateRange ending now.
+
+    Supported phrases (case-insensitive):
+        "last N days|weeks|months|years" (also "past ..."; N >= 1)
+        "last day|week|month|year" (one unit)
+        "this week|month|year", "year to date" / "ytd"
+        "today", "yesterday", "all time"
+
+    Months and years use calendar arithmetic, clamped at month ends.
 
     Args:
-        text: Natural language date expression
+        text: Time period phrase, as passed by MCP tool callers
+        now: Reference time; defaults to datetime.now()
 
     Returns:
-        DateRange corresponding to the expression
+        DateRange for the phrase
 
-    Examples:
-        "last 3 months" -> DateRange for last 3 months
-        "last month" -> DateRange for last month
-        "this year" -> DateRange for current year
+    Raises:
+        ValueError: If the phrase is not supported. Unknown phrases are
+            rejected rather than mapped to a default so callers never get a
+            silently different period.
     """
-    text = text.lower().strip()
+    now = now or datetime.now()
+    phrase = " ".join(text.lower().split())
 
-    if "last" in text and "month" in text:
-        if "3" in text:
-            return get_date_range_from_months(3)
-        elif "6" in text:
-            return get_date_range_from_months(6)
-        elif "12" in text:
-            return get_date_range_from_months(12)
-        else:
-            return get_date_range_from_months(1)
+    match = _RELATIVE_PERIOD.fullmatch(phrase)
+    if match:
+        count = int(match.group("count")) if match.group("count") else 1
+        if count >= 1:
+            return DateRange(
+                start_date=_go_back(now, count, match.group("unit")), end_date=now
+            )
 
-    elif "last" in text and "day" in text:
-        if "30" in text:
-            return get_date_range_from_days(30)
-        elif "90" in text:
-            return get_date_range_from_days(90)
-        else:
-            return get_date_range_from_days(7)
+    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if phrase == "today":
+        return DateRange(start_date=start_of_today, end_date=now)
+    if phrase == "yesterday":
+        return DateRange(
+            start_date=start_of_today - timedelta(days=1),
+            end_date=start_of_today - timedelta(microseconds=1),
+        )
+    if phrase == "this week":
+        return DateRange(
+            start_date=start_of_today - timedelta(days=now.weekday()), end_date=now
+        )
+    if phrase == "this month":
+        return DateRange(start_date=start_of_today.replace(day=1), end_date=now)
+    if phrase in ("this year", "year to date", "ytd"):
+        return DateRange(
+            start_date=start_of_today.replace(month=1, day=1), end_date=now
+        )
+    if phrase == "all time":
+        return DateRange(start_date=EARLIEST_DATE, end_date=now)
 
-    elif "this year" in text:
-        now = datetime.now()
-        start_date = datetime(now.year, 1, 1)
-        return DateRange(start_date=start_date, end_date=now)
-
-    elif "this month" in text:
-        now = datetime.now()
-        start_date = datetime(now.year, now.month, 1)
-        return DateRange(start_date=start_date, end_date=now)
-
-    else:
-        # Default to last 3 months
-        return get_date_range_from_months(3)
+    raise ValueError(
+        f"Unrecognized time period {text!r}. Supported: {SUPPORTED_TIME_PERIODS}"
+    )
 
 
 def format_date_range_for_display(date_range: DateRange) -> str:

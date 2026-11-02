@@ -5,6 +5,7 @@ import os
 import sys
 from unittest.mock import AsyncMock, Mock
 
+from dateutil.relativedelta import relativedelta
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -21,9 +22,9 @@ def test_date_range_from_months():
     """Test date range generation from months."""
     date_range = get_date_range_from_months(3)
 
-    # Should be approximately 3 months ago
-    expected_start = datetime.now() - timedelta(days=90)
-    assert abs((date_range.start_date - expected_start).days) <= 1
+    # Calendar months: the same day three months ago
+    expected_start = datetime.now() - relativedelta(months=3)
+    assert abs((date_range.start_date - expected_start).total_seconds()) < 60
 
     # End date should be now
     assert abs((date_range.end_date - datetime.now()).total_seconds()) < 60
@@ -33,8 +34,8 @@ def test_parse_natural_language_date():
     """Test natural language date parsing."""
     # Test "last 3 months"
     date_range = parse_natural_language_date("last 3 months")
-    expected_start = datetime.now() - timedelta(days=90)
-    assert abs((date_range.start_date - expected_start).days) <= 1
+    expected_start = datetime.now() - relativedelta(months=3)
+    assert abs((date_range.start_date - expected_start).total_seconds()) < 60
 
     # Test "this year"
     date_range = parse_natural_language_date("this year")
