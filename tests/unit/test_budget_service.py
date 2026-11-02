@@ -1,6 +1,6 @@
 """Unit tests for BudgetService."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -159,14 +159,15 @@ class TestBudgetServiceHelpers:
 
     def test_core_data_timestamp_conversion(self, budget_service):
         """Test Core Data timestamp conversion."""
-        # Core Data epoch is Jan 1, 2001
+        # Core Data epoch is 2001-01-01 UTC; the result is naive local time
         timestamp = 0.0
         result = budget_service._core_data_timestamp_to_datetime(timestamp)
-        assert result == datetime(2001, 1, 1)
+        expected = datetime(2001, 1, 1, tzinfo=UTC).astimezone().replace(tzinfo=None)
+        assert result == expected
 
     def test_datetime_to_core_data_timestamp(self, budget_service):
         """Test datetime to Core Data timestamp conversion."""
-        dt = datetime(2001, 1, 1)
+        dt = datetime(2001, 1, 1, tzinfo=UTC)
         result = budget_service._datetime_to_core_data_timestamp(dt)
         assert result == 0.0
 

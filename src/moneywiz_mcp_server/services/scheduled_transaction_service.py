@@ -17,7 +17,10 @@ from moneywiz_mcp_server.models.scheduled_transaction import (
     WeekendHandling,
 )
 from moneywiz_mcp_server.models.transaction import TransactionType
-from moneywiz_mcp_server.utils.date_utils import datetime_to_core_data_timestamp
+from moneywiz_mcp_server.utils.date_utils import (
+    core_data_timestamp_to_datetime,
+    datetime_to_core_data_timestamp,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -324,9 +327,7 @@ class ScheduledTransactionService:
 
     def _core_data_timestamp_to_datetime(self, timestamp: float) -> datetime:
         """Convert Core Data timestamp to Python datetime."""
-        # Core Data reference date: January 1, 2001, 00:00:00 UTC
-        core_data_epoch = datetime(2001, 1, 1)
-        return core_data_epoch + timedelta(seconds=timestamp)
+        return core_data_timestamp_to_datetime(timestamp)
 
     def _infer_recurrence_pattern_from_duration(
         self, record: dict[str, Any]

@@ -16,6 +16,10 @@ from moneywiz_mcp_server.models.budget import (
     BudgetVsActualResponse,
 )
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+from moneywiz_mcp_server.utils.date_utils import (
+    core_data_timestamp_to_datetime,
+    datetime_to_core_data_timestamp,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -538,10 +542,8 @@ class BudgetService:
 
         Core Data uses January 1, 2001 as the reference date.
         """
-        core_data_epoch = datetime(2001, 1, 1)
-        return core_data_epoch + timedelta(seconds=timestamp)
+        return core_data_timestamp_to_datetime(timestamp)
 
     def _datetime_to_core_data_timestamp(self, dt: datetime) -> float:
         """Convert datetime to Core Data timestamp."""
-        core_data_epoch = datetime(2001, 1, 1)
-        return (dt - core_data_epoch).total_seconds()
+        return datetime_to_core_data_timestamp(dt)
