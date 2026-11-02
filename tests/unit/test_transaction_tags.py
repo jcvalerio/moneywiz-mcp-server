@@ -10,16 +10,31 @@ from moneywiz_mcp_server.services.transaction_service import TransactionService
 
 @pytest.mark.asyncio
 async def test_enhance_transaction_with_tags_uses_moneywiz_tag_name_fields():
-    """Transaction tags are resolved from MoneyWiz's tag relation table."""
-    mock_db = AsyncMock()
+    """Transaction tags are resolved from MoneyWiz's tag relation table.
 
-    def mock_execute_query(query, params):
+    The join table name and its Transaction/Tag columns are Core Data
+    artifacts resolved dynamically via `DatabaseManager.resolve_join_table`
+    (backed by `get_entity_name_map()` and `sqlite_master`) - they are not
+    fixed ids, so the mock below stands in for one arbitrary database's
+    resolved table/columns (Transaction=36, Tag=35) rather than assuming
+    those values are universal.
+    """
+    mock_db = AsyncMock()
+    mock_db.get_entity_name_map.return_value = {"Transaction": 36, "Tag": 35}
+    mock_db.resolve_join_table.return_value = (
+        "Z_36TAGS",
+        "Z_36TRANSACTIONS",
+        "Z_35TAGS",
+    )
+
+    def mock_execute_query(query, params=()):
         if "FROM Z_36TAGS" in query:
             return [{"tag_id": 35}, {"tag_id": 36}]
-        if "Z_ENT = 35" in query and params[0] == 35:
-            return [{"ZNAME6": "Business"}]
-        if "Z_ENT = 35" in query and params[0] == 36:
-            return [{"ZNAME": "Tax"}]
+        if "Z_ENT = ? AND Z_PK = ?" in query and params[0] == 35:
+            if params[1] == 35:
+                return [{"ZNAME6": "Business"}]
+            if params[1] == 36:
+                return [{"ZNAME": "Tax"}]
         return []
 
     mock_db.execute_query.side_effect = mock_execute_query

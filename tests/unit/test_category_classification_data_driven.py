@@ -18,6 +18,14 @@ class TestDataDrivenCategoryClassification:
     def mock_db_manager(self):
         """Create a mock database manager."""
         db_manager = AsyncMock()
+        db_manager.get_entity_name_map.return_value = {
+            "Category": 19,
+            "DepositTransaction": 37,
+            "WithdrawTransaction": 47,
+            "TransferDepositTransaction": 45,
+            "TransferWithdrawTransaction": 46,
+            "ReconcileTransaction": 42,
+        }
         return db_manager
 
     @pytest.fixture

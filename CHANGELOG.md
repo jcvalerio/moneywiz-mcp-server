@@ -22,6 +22,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 - Database auto-detection now finds the database under `Data/Library/Application Support`, where MoneyWiz stores it once iCloud sync is enabled, and skips the always-empty CloudKit shared-scope store kept alongside it.
 - Database auto-detection no longer selects SQLite side files (`-wal`, `-shm`, `-journal`), ranks MoneyWiz-named files ahead of unrelated SQLite stores, and logs a warning instead of silently skipping directories that macOS privacy controls block.
 - `setup_env.py` now uses the same detection logic as the server, so it finds databases relocated by iCloud sync.
+- Core Data `Z_ENT` (entity) ids are now resolved dynamically per database instead of hardcoded, fixing silently wrong or missing data (transactions, tags, account balances, categories, scheduled transactions, budgets) on databases where MoneyWiz assigned different entity ids.
 
 ## 1.0.1 - 2026-05-11
 

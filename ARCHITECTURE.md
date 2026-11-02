@@ -71,38 +71,45 @@ Data models for structured financial data:
 
 ### Core Data Entities
 
-MoneyWiz uses Core Data with the following key entity types:
+MoneyWiz uses Core Data with the following key entity types. **Z_ENT ids are
+assigned per compiled Core Data model and are NOT stable across MoneyWiz
+versions or database exports** - the numbers below are illustrative of one
+observed database only. The server never hardcodes them: every entity id is
+resolved at runtime via `DatabaseManager.get_entity_name_map()`, which reads
+the actual name→id mapping from `Z_PRIMARYKEY` for the database being opened.
 
-#### Account Types (Entities 10-16)
-- **10**: Bank Checking Account → 'checking'
-- **11**: Bank Savings Account → 'savings'
-- **12**: Cash Account → 'cash'
-- **13**: Credit Card Account → 'credit_card'
-- **14**: Loan Account → 'loan'
-- **15**: Investment Account → 'investment'
-- **16**: Forex Account → 'forex'
+#### Account Types
+- Bank Checking Account → 'checking'
+- Bank Savings Account → 'savings'
+- Cash Account → 'cash'
+- Credit Card Account → 'credit_card'
+- Loan Account → 'loan'
+- Investment Account → 'investment'
+- Forex Account → 'forex'
 
-#### Transaction Types (Entities 37, 45-47)
-- **37**: Deposit Transaction
-- **45**: Transfer Deposit Transaction
-- **46**: Transfer Withdraw Transaction
-- **47**: Withdraw Transaction
+#### Transaction Types
+- Deposit Transaction
+- Transfer Deposit Transaction
+- Transfer Withdraw Transaction
+- Withdraw Transaction
 
 #### Other Entities
-- **19**: Categories
-- **28**: Payees
+- Category
+- Payee
+- Tag
+- Budget
 
 ### Key Database Operations
 
 #### Account Balance Calculation
 ```sql
--- Get opening balance
+-- Get opening balance (account entity ids resolved via get_entity_name_map())
 SELECT ZOPENINGBALANCE FROM ZSYNCOBJECT
-WHERE Z_PK = ? AND Z_ENT BETWEEN 10 AND 16;
+WHERE Z_PK = ? AND Z_ENT IN (?, ?, ?, ?, ?, ?, ?);
 
--- Sum transaction amounts
+-- Sum transaction amounts (transaction entity ids resolved the same way)
 SELECT SUM(ZAMOUNT1) FROM ZSYNCOBJECT
-WHERE Z_ENT IN (37,45,46,47) AND ZACCOUNT2 = ?;
+WHERE Z_ENT IN (?, ?, ?, ?) AND ZACCOUNT2 = ?;
 
 -- Formula: balance = opening_balance + sum(transaction_amounts)
 ```
@@ -113,9 +120,9 @@ WHERE Z_ENT IN (37,45,46,47) AND ZACCOUNT2 = ?;
 SELECT ca.ZCATEGORY FROM ZCATEGORYASSIGMENT ca
 WHERE ca.ZTRANSACTION = ?;
 
--- Get category name
+-- Get category name (Category entity id resolved via get_entity_name_map())
 SELECT ZNAME2 FROM ZSYNCOBJECT
-WHERE Z_ENT = 19 AND Z_PK = ?;
+WHERE Z_ENT = ? AND Z_PK = ?;
 ```
 
 ## MCP Tools

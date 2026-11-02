@@ -19,6 +19,10 @@ from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
 
 logger = logging.getLogger(__name__)
 
+# Entity name used to resolve the Budget Z_ENT id dynamically, since it is
+# not stable across MoneyWiz versions/exports.
+BUDGET_ENTITY_NAME = "Budget"
+
 
 class BudgetService:
     """Service for budget operations and spending analysis."""
@@ -35,6 +39,15 @@ class BudgetService:
         self.db_manager = db_manager
         self._category_cache: dict[int, str] = {}
         self._account_cache: dict[int, str] = {}
+
+    async def _get_budget_entity_id(self) -> int:
+        """Resolve this database's Budget Z_ENT id.
+
+        DatabaseManager.get_entity_name_map() already caches per-connection,
+        so no additional caching is needed here.
+        """
+        entity_map = await self.db_manager.get_entity_name_map()
+        return entity_map[BUDGET_ENTITY_NAME]
 
     async def get_budgets(
         self,
@@ -60,13 +73,14 @@ class BudgetService:
 
             budgets = []
 
-            # Query Entity 18 for budget definitions
+            # Query the Budget entity for budget definitions
+            budget_entity_id = await self._get_budget_entity_id()
             query = """
                 SELECT * FROM ZSYNCOBJECT
-                WHERE Z_ENT = 18
+                WHERE Z_ENT = ?
             """
 
-            records = await self.db_manager.execute_query(query)
+            records = await self.db_manager.execute_query(query, (budget_entity_id,))
 
             if not records:
                 logger.info("No budget records found")
@@ -133,6 +147,8 @@ class BudgetService:
             else:
                 status = BudgetStatus.ON_TRACK
 
+            budget_entity_id = await self._get_budget_entity_id()
+
             # Get creation date
             created_date = None
             creation_ts = record.get("ZOBJECTCREATIONDATE")
@@ -164,7 +180,7 @@ class BudgetService:
                 transaction_count=transaction_count,
                 created_date=created_date,
                 database_id=budget_pk,
-                entity_type=18,
+                entity_type=budget_entity_id,
             )
 
         except Exception as e:

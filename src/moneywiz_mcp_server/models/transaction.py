@@ -91,33 +91,30 @@ class TransactionModel:
     tags: list[str] = field(default_factory=list)  # Tag names from Z_36TAGS
 
     @classmethod
-    def from_raw_data(cls, row: dict[str, Any]) -> "TransactionModel":
+    def from_raw_data(
+        cls,
+        row: dict[str, Any],
+        entity_id_to_type: dict[int, "TransactionType"] | None = None,
+    ) -> "TransactionModel":
         """
         Create TransactionModel from raw Core Data row.
 
         Args:
             row: Raw ZSYNCOBJECT row data
+            entity_id_to_type: Mapping of this database's actual Z_ENT ids to
+                TransactionType, resolved dynamically via
+                DatabaseManager.get_entity_name_map() - Z_ENT ids are not
+                stable across MoneyWiz database versions/exports, so callers
+                must not rely on a hardcoded mapping here.
 
         Returns:
             TransactionModel instance
         """
         entity_id = row.get("Z_ENT", 0)
 
-        # Map entity to transaction type
-        entity_type_map = {
-            37: TransactionType.DEPOSIT,
-            45: TransactionType.TRANSFER_IN,
-            46: TransactionType.TRANSFER_OUT,
-            47: TransactionType.WITHDRAW,
-            40: TransactionType.INVESTMENT_BUY,
-            41: TransactionType.INVESTMENT_SELL,
-            38: TransactionType.INVESTMENT_EXCHANGE,
-            43: TransactionType.REFUND,
-            42: TransactionType.RECONCILE,
-            44: TransactionType.TRANSFER_BUDGET,
-        }
-
-        transaction_type = entity_type_map.get(entity_id, TransactionType.UNKNOWN)
+        transaction_type = (entity_id_to_type or {}).get(
+            entity_id, TransactionType.UNKNOWN
+        )
 
         # Convert date (Core Data timestamp to Python datetime)
         date_timestamp = row.get("ZDATE1", 0)
