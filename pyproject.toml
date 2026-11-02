@@ -261,9 +261,3 @@ module = [
     "final_scheduled_investigation",
 ]
 ignore_missing_imports = true
-
-# Bandit security configuration
-[tool.bandit]
-exclude_dirs = ["tests", "scripts"]
-tests = ["B201", "B301"]
-skips = ["B101", "B601", "B110", "B608"]  # B110: try-except-pass, B608: hardcoded SQL (false positive)
