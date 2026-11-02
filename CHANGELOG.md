@@ -6,6 +6,10 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+### Fixed
+
+- The MCP handshake now reports the server's own version. It previously reported the `mcp` SDK's version (for example `1.30.0`) because FastMCP 1.x has no version setting.
+
 ## 2.0.0 - 2026-11-02
 
 Major release that corrects data 1.0.x returned incorrectly. On current MoneyWiz 3 databases, 1.0.1 computed account balances from transfers only, looked up categories, payees, budgets, and tags in the wrong records, shifted dates by the machine's UTC offset, and misread most time-period phrases, all without errors. The corrections change financial results and date ranges for the same inputs, and Python 3.10 support is dropped, so this is a major version under the [versioning policy](docs/RELEASING.md#versioning-policy).
