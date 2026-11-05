@@ -365,15 +365,18 @@ class ScheduledTransactionService:
             try:
                 # MoneyWiz stores scheduled category links in ZCATEGORYASSIGMENT.
                 # Column names keep MoneyWiz/Core Data's misspelling of "TRANSACITION".
+                # Join on ZSCHEDULEDTRANSACITION (the Z_PK) only: the sibling
+                # Z<n>_SCHEDULEDTRANSACITION column holds the target's Z_ENT, and
+                # its name changes with the model's entity ids.
                 category_assignment_query = """
                 SELECT ca.ZCATEGORY
                 FROM ZCATEGORYASSIGMENT ca
                 WHERE ca.ZSCHEDULEDTRANSACITION = ?
-                   OR ca.Z31_SCHEDULEDTRANSACITION = ?
+                ORDER BY ca.Z_PK
                 LIMIT 1
                 """
                 category_assignment = await self.db_manager.execute_query(
-                    category_assignment_query, (scheduled_id, scheduled_id)
+                    category_assignment_query, (scheduled_id,)
                 )
 
                 if category_assignment:
