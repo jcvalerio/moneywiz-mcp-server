@@ -3,6 +3,7 @@
 import calendar
 from datetime import datetime, timedelta
 from decimal import Decimal
+import sqlite3
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -451,3 +452,42 @@ class TestScheduledTransactionService:
         # Test with no commitments
         result = scheduled_service._analyze_commitment_endings([])
         assert result == "No finite commitments found."
+
+
+class TestScheduledCategoryAgainstSqlite:
+    """Category lookup runs its real SQL against MoneyWiz-shaped schemas."""
+
+    @pytest.mark.parametrize("handler_ent", [31, 32], ids=["model-a", "model-b"])
+    @pytest.mark.asyncio
+    async def test_category_resolves_regardless_of_entity_ids(
+        self, tmp_path, handler_ent
+    ):
+        """The Z<n>_ type column name differs per model; the lookup must not
+        depend on it (MoneyWiz 3 uses Z32_, older models Z31_)."""
+        path = tmp_path / "moneywiz.sqlite"
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER, Z_NAME VARCHAR)")
+        conn.execute(
+            f"""CREATE TABLE ZCATEGORYASSIGMENT (
+                Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, ZCATEGORY INTEGER,
+                ZSCHEDULEDTRANSACITION INTEGER,
+                Z{handler_ent}_SCHEDULEDTRANSACITION INTEGER,
+                ZTRANSACTION INTEGER)"""
+        )
+        # Scheduled handler Z_PK 500 is assigned category 42; the type column
+        # holds the handler's Z_ENT, never its Z_PK.
+        conn.execute(
+            "INSERT INTO ZCATEGORYASSIGMENT VALUES (1, 2, 42, 500, ?, NULL)",
+            (handler_ent + 2,),
+        )
+        conn.commit()
+        conn.close()
+
+        db = DatabaseManager(str(path), read_only=True)
+        await db.initialize()
+        try:
+            service = ScheduledTransactionService(db)
+            assert await service._get_category_id_for_scheduled({"Z_PK": 500}) == 42
+            assert await service._get_category_id_for_scheduled({"Z_PK": 501}) is None
+        finally:
+            await db.close()
