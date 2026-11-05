@@ -28,10 +28,13 @@ class TestDurationDecoding:
     def test_ns_calendar_unit_codes(self, code, pattern):
         assert pattern_from_duration_unit(code) == pattern
 
-    def test_unknown_code_warns_and_defaults_to_monthly(self, caplog):
+    def test_unknown_code_warns_once_and_defaults_to_monthly(self, caplog):
         with caplog.at_level(logging.WARNING):
             assert pattern_from_duration_unit(999) == M
-        assert "999" in caplog.text
+            assert pattern_from_duration_unit(999) == M
+            assert pattern_from_duration_unit(998) == M
+        assert caplog.text.count("unit 999") == 1
+        assert "unit 998" in caplog.text
 
     @pytest.mark.parametrize(
         ("code", "count", "expected"),

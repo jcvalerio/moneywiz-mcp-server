@@ -39,19 +39,26 @@ DURATION_UNIT_PATTERNS: dict[int, RecurrencePattern] = {
 
 DEFAULT_PATTERN = RecurrencePattern.MONTHLY
 
+# Unknown codes already reported, so each is logged once per process rather
+# than on every query.
+_warned_unknown_codes: set[int] = set()
+
 
 def pattern_from_duration_unit(code: int | None) -> RecurrencePattern:
     """Map a MoneyWiz duration unit code to a RecurrencePattern.
 
-    Unknown codes fall back to monthly, with a warning so the guess is visible.
+    Unknown codes fall back to monthly, with a warning (once per code) so the
+    guess is visible.
     """
     if code is None:
         return DEFAULT_PATTERN
     pattern = DURATION_UNIT_PATTERNS.get(code)
     if pattern is None:
-        logger.warning(
-            f"Unknown MoneyWiz duration unit {code}; assuming {DEFAULT_PATTERN}"
-        )
+        if code not in _warned_unknown_codes:
+            _warned_unknown_codes.add(code)
+            logger.warning(
+                f"Unknown MoneyWiz duration unit {code}; assuming {DEFAULT_PATTERN}"
+            )
         return DEFAULT_PATTERN
     return pattern
 

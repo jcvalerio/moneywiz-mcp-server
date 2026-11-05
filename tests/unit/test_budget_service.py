@@ -151,17 +151,20 @@ class TestBudgetServiceHelpers:
     """Test cases for BudgetService helper methods."""
 
     @pytest.mark.parametrize(
-        ("unit_code", "period"),
+        ("unit_code", "count", "period"),
         [
-            (16, BudgetPeriod.DAILY),
-            (8192, BudgetPeriod.WEEKLY),
-            (8, BudgetPeriod.MONTHLY),
-            (4, BudgetPeriod.YEARLY),
+            (16, 1, BudgetPeriod.DAILY),
+            (16, 7, BudgetPeriod.WEEKLY),
+            (16, 14, BudgetPeriod.WEEKLY),
+            (8192, 1, BudgetPeriod.WEEKLY),
+            (8, 1, BudgetPeriod.MONTHLY),
+            (8, None, BudgetPeriod.MONTHLY),
+            (4, 1, BudgetPeriod.YEARLY),
         ],
     )
     @pytest.mark.asyncio
     async def test_budget_period_from_duration_unit(
-        self, budget_service, mock_db_manager, unit_code, period
+        self, budget_service, mock_db_manager, unit_code, count, period
     ):
         """Budget periods decode MoneyWiz NSCalendarUnit duration codes."""
         mock_db_manager.execute_query.return_value = []
@@ -169,7 +172,12 @@ class TestBudgetServiceHelpers:
             return_value={"spent": Decimal("0"), "count": 0}
         )
         model = await budget_service._convert_record_to_model(
-            {"Z_PK": 1, "ZOPENINGBALANCE1": 100, "ZDURATIONUNITS": unit_code}
+            {
+                "Z_PK": 1,
+                "ZOPENINGBALANCE1": 100,
+                "ZDURATIONUNITS": unit_code,
+                "ZDURATION": count,
+            }
         )
         assert model is not None
         assert model.period == period

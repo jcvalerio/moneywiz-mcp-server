@@ -19,7 +19,7 @@ from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
 )
-from moneywiz_mcp_server.utils.recurrence import pattern_from_duration_unit
+from moneywiz_mcp_server.utils.recurrence import recurrence_from_duration
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,11 @@ class BudgetService:
                 return None  # Skip zero or negative budgets
 
             # Determine period from ZDURATIONUNITS
-            pattern = pattern_from_duration_unit(record.get("ZDURATIONUNITS"))
+            # Decode unit and count together, like scheduled transactions, so
+            # "every 7 days" is weekly. BudgetPeriod has no interval field.
+            pattern, _ = recurrence_from_duration(
+                record.get("ZDURATIONUNITS"), record.get("ZDURATION")
+            )
             period = BUDGET_PERIOD_BY_PATTERN[pattern]
 
             # Get categories linked to this budget
