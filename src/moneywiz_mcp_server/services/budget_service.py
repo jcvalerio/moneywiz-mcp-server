@@ -20,6 +20,7 @@ from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
 )
+from moneywiz_mcp_server.utils.recurrence import pattern_from_duration_unit
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +31,6 @@ BUDGET_ENTITY_NAME = "Budget"
 
 class BudgetService:
     """Service for budget operations and spending analysis."""
-
-    # Duration units mapping (same as scheduled transactions)
-    DURATION_UNITS: ClassVar[dict[int, BudgetPeriod]] = {
-        1: BudgetPeriod.DAILY,
-        2: BudgetPeriod.WEEKLY,
-        4: BudgetPeriod.YEARLY,
-        8: BudgetPeriod.MONTHLY,
-    }
 
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
@@ -123,8 +116,8 @@ class BudgetService:
                 return None  # Skip zero or negative budgets
 
             # Determine period from ZDURATIONUNITS
-            duration_units = record.get("ZDURATIONUNITS", 8)
-            period = self.DURATION_UNITS.get(duration_units, BudgetPeriod.MONTHLY)
+            pattern = pattern_from_duration_unit(record.get("ZDURATIONUNITS"))
+            period = BudgetPeriod(pattern.value)
 
             # Get categories linked to this budget
             categories = await self._get_budget_categories(budget_pk)

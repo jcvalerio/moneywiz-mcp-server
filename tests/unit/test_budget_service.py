@@ -150,12 +150,29 @@ class TestBudgetService:
 class TestBudgetServiceHelpers:
     """Test cases for BudgetService helper methods."""
 
-    def test_duration_units_mapping(self, budget_service):
-        """Test that duration units are mapped correctly."""
-        assert budget_service.DURATION_UNITS[1] == BudgetPeriod.DAILY
-        assert budget_service.DURATION_UNITS[2] == BudgetPeriod.WEEKLY
-        assert budget_service.DURATION_UNITS[4] == BudgetPeriod.YEARLY
-        assert budget_service.DURATION_UNITS[8] == BudgetPeriod.MONTHLY
+    @pytest.mark.parametrize(
+        ("unit_code", "period"),
+        [
+            (16, BudgetPeriod.DAILY),
+            (8192, BudgetPeriod.WEEKLY),
+            (8, BudgetPeriod.MONTHLY),
+            (4, BudgetPeriod.YEARLY),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_budget_period_from_duration_unit(
+        self, budget_service, mock_db_manager, unit_code, period
+    ):
+        """Budget periods decode MoneyWiz NSCalendarUnit duration codes."""
+        mock_db_manager.execute_query.return_value = []
+        budget_service._calculate_spent_amount = AsyncMock(
+            return_value={"spent": Decimal("0"), "count": 0}
+        )
+        model = await budget_service._convert_record_to_model(
+            {"Z_PK": 1, "ZOPENINGBALANCE1": 100, "ZDURATIONUNITS": unit_code}
+        )
+        assert model is not None
+        assert model.period == period
 
     def test_generate_recommendations_over_budget(self, budget_service):
         """Test recommendations for over budget scenarios."""
