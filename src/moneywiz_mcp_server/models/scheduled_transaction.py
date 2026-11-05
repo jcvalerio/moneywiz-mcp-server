@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import Enum, StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from .base import ApiDateTime, BaseCurrencyResponse
 from .currency_types import CurrencyAmounts
@@ -176,6 +176,47 @@ class CommitmentBreakdown(BaseModel):
     urgency_level: str = Field(..., description="Urgency: immediate, regular, ending")
 
 
+class IncomeSource(BaseModel):
+    """One income stream counted in a salary breakdown, in its own currency."""
+
+    description: str = Field(..., description="Income description")
+    currency: str = Field(..., description="Currency code")
+    amount_per_payment: Decimal = Field(..., description="Amount of each payment")
+    payments_in_period: int = Field(..., description="Payments inside the period")
+    total_in_period: Decimal = Field(..., description="Total received in the period")
+    recurrence_pattern: str = Field(..., description="daily/weekly/monthly/yearly")
+    recurrence_interval: int = Field(..., description="Every N pattern units")
+    source: str = Field(
+        ..., description="'scheduled' (MoneyWiz schedule) or 'provided' (tool input)"
+    )
+
+    @field_serializer("amount_per_payment", "total_in_period")
+    def _serialize_decimal(self, value: Decimal) -> float:
+        return float(value)
+
+
+class ExchangeRateUsed(BaseModel):
+    """Rate used to express an amount in the display currency."""
+
+    currency: str = Field(..., description="Currency code")
+    units_per_display_currency: float = Field(
+        ..., description="Units of this currency per 1 unit of the display currency"
+    )
+    as_of: ApiDateTime | None = Field(
+        None, description="Date of the MoneyWiz transaction the rate comes from"
+    )
+    source: str = Field(..., description="'moneywiz' or 'provided'")
+
+
+class DisplayCurrencyTotals(BaseModel):
+    """Period totals converted into one currency."""
+
+    currency: str = Field(..., description="Display currency")
+    income: float = Field(..., description="Income in the period")
+    commitments: float = Field(..., description="Commitments in the period")
+    remaining: float = Field(..., description="Income minus commitments")
+
+
 class ScheduledTransactionResponse(BaseModel):
     """Response model for scheduled transaction data."""
 
@@ -242,7 +283,9 @@ class ScheduledTransactionListResponse(BaseModel):
 class SalaryBreakdownResponse(BaseCurrencyResponse):
     """Response model for salary breakdown analysis with occurrence intelligence."""
 
-    salary_amount: CurrencyAmounts = Field(..., description="Salary amount by currency")
+    salary_amount: CurrencyAmounts = Field(
+        ..., description="Amount per salary payment by currency, when known"
+    )
     period_start: str = Field(..., description="Analysis period start date (ISO)")
     period_end: str = Field(..., description="Analysis period end date (ISO)")
     next_salary_date: str = Field(..., description="Next salary date (ISO)")
@@ -273,6 +316,34 @@ class SalaryBreakdownResponse(BaseCurrencyResponse):
     )
     recommendations: list[str] = Field(
         default_factory=list, description="Financial planning recommendations"
+    )
+
+    # Multi-currency income and conversion
+    income_in_period: CurrencyAmounts = Field(
+        default_factory=CurrencyAmounts,
+        description="All income received in the period, by native currency",
+    )
+    income_sources: list[IncomeSource] = Field(
+        default_factory=list, description="Income streams counted in the period"
+    )
+    scheduled_transfers_in_period: CurrencyAmounts = Field(
+        default_factory=CurrencyAmounts,
+        description="Scheduled transfers between own accounts (e.g. credit card "
+        "payments, savings moves). Money allocations, not expenses: excluded "
+        "from commitments and coverage.",
+    )
+    display_currency: str | None = Field(
+        None, description="Currency the combined totals are expressed in"
+    )
+    totals_in_display_currency: DisplayCurrencyTotals | None = Field(
+        None, description="Income, commitments and remaining converted to one currency"
+    )
+    exchange_rates_used: list[ExchangeRateUsed] = Field(
+        default_factory=list, description="Rates used for the combined totals"
+    )
+    currencies_without_rate: list[str] = Field(
+        default_factory=list,
+        description="Currencies left out of the combined totals for lack of a rate",
     )
 
 

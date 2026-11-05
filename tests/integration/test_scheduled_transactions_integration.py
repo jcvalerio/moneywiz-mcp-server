@@ -262,6 +262,7 @@ class TestScheduledTransactionsIntegration:
             next_salary_date=next_salary_date,
             salary_amount=salary_amount,
             planning_horizon_months=3,
+            salary_currency="USD",
         )
 
         # Verify the response structure
@@ -587,6 +588,7 @@ class TestScheduledTransactionsErrorScenarios:
             next_salary_date=next_salary_date,
             salary_amount=5000.0,
             planning_horizon_months=-1,  # Negative value
+            salary_currency="USD",
         )
 
         # Verify we still get a valid response structure
