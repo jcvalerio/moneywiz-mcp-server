@@ -865,7 +865,9 @@ async def get_commitments_ending_timeline(
 
         try:
             from collections import defaultdict
-            from datetime import datetime, timedelta
+            from datetime import datetime
+
+            from .utils.recurrence import add_months
 
             # Initialize scheduled transaction service
             scheduled_service = ScheduledTransactionService(db_manager)
@@ -889,7 +891,7 @@ async def get_commitments_ending_timeline(
                 lambda: {"amount": 0.0, "count": 0}
             )
 
-            end_date = datetime.now() + timedelta(days=months_ahead * 30)
+            end_date = add_months(datetime.now(), months_ahead)
 
             for commitment in finite_commitments:
                 if (

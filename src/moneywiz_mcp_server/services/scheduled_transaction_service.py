@@ -1,6 +1,6 @@
 """Service for scheduled transaction operations and occurrence tracking."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 import logging
@@ -12,14 +12,17 @@ from moneywiz_mcp_server.models.scheduled_transaction import (
     CommitmentBreakdown,
     RecurrenceEndCondition,
     RecurrencePattern,
-    SalaryBreakdownResponse,
     ScheduledTransactionModel,
     WeekendHandling,
 )
 from moneywiz_mcp_server.models.transaction import TransactionType
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
-    datetime_to_core_data_timestamp,
+)
+from moneywiz_mcp_server.utils.recurrence import (
+    add_months,
+    occurrence_dates,
+    recurrence_from_duration,
 )
 
 logger = logging.getLogger(__name__)
@@ -241,8 +244,10 @@ class ScheduledTransactionService:
                     category_info["root_category"] = "Uncategorized"
                 payee = await self._get_payee_name(record.get("ZPAYEE1"))
 
-            # Determine recurrence pattern from ZDURATIONUNITS1
-            recurrence_pattern = self._infer_recurrence_pattern_from_duration(record)
+            # Recurrence: unit (ZDURATIONUNITS1) and "every N" count (ZDURATION1)
+            recurrence_pattern, recurrence_interval = recurrence_from_duration(
+                record.get("ZDURATIONUNITS1"), record.get("ZDURATION1")
+            )
 
             # Calculate occurrence data from actual fields
             executes_count = record.get("ZEXECUTESCOUNT", 0)
@@ -256,7 +261,11 @@ class ScheduledTransactionService:
 
             # Generate upcoming dates
             upcoming_dates = await self._generate_upcoming_dates(
-                next_execution_date, recurrence_pattern, None, 6
+                next_execution_date,
+                recurrence_pattern,
+                None,
+                6,
+                interval=recurrence_interval,
             )
 
             # Get description
@@ -282,7 +291,7 @@ class ScheduledTransactionService:
                 transaction_type=self._infer_transaction_type(amount),
                 tags=tags,
                 recurrence_pattern=recurrence_pattern,
-                recurrence_interval=record.get("ZDURATION1", 1),
+                recurrence_interval=recurrence_interval,
                 next_execution_date=next_execution_date,
                 weekend_handling=self._infer_weekend_handling(record),
                 end_condition=end_condition,
@@ -300,8 +309,11 @@ class ScheduledTransactionService:
 
             return scheduled_transaction
 
-        except Exception as e:
-            logger.error(f"Failed to convert record to model: {e}")
+        except Exception:
+            logger.exception(
+                f"Failed to convert scheduled transaction Z_PK={record.get('Z_PK')}; "
+                "it is omitted from results"
+            )
             return None
 
     async def _matches_filters(
@@ -322,24 +334,6 @@ class ScheduledTransactionService:
             return False
 
         return True
-
-    def _infer_recurrence_pattern_from_duration(
-        self, record: dict[str, Any]
-    ) -> RecurrencePattern:
-        """Infer recurrence pattern from ZDURATIONUNITS1 field."""
-        # Based on observed data:
-        # ZDURATIONUNITS1 = 4 appears to be yearly
-        # ZDURATIONUNITS1 = 8 appears to be monthly
-        duration_units = record.get("ZDURATIONUNITS1", 8)
-
-        patterns = {
-            1: RecurrencePattern.DAILY,
-            2: RecurrencePattern.WEEKLY,
-            4: RecurrencePattern.YEARLY,
-            8: RecurrencePattern.MONTHLY,
-        }
-        # Default to monthly for unknown patterns
-        return patterns.get(duration_units, RecurrencePattern.MONTHLY)
 
     def _infer_weekend_handling(self, record: dict[str, Any]) -> WeekendHandling:
         """Infer weekend handling from ZWEEKENDSHANDLER field."""
@@ -475,38 +469,19 @@ class ScheduledTransactionService:
         pattern: RecurrencePattern,
         remaining_occurrences: int | None,
         months_ahead: int = 6,
+        interval: int = 1,
     ) -> list[datetime]:
-        """Generate list of upcoming execution dates."""
-        upcoming_dates = []
-        current_date = next_date
-        max_dates = remaining_occurrences or (months_ahead * 12)  # Reasonable limit
-
-        for i in range(min(max_dates, 20)):  # Limit to 20 dates for performance
-            if current_date > datetime.now() + timedelta(days=months_ahead * 30):
-                break
-
-            upcoming_dates.append(current_date)
-
-            # Calculate next date based on pattern
-            if pattern == RecurrencePattern.DAILY:
-                current_date += timedelta(days=1)
-            elif pattern == RecurrencePattern.WEEKLY:
-                current_date += timedelta(weeks=1)
-            elif pattern == RecurrencePattern.MONTHLY:
-                # Add one month (approximate)
-                if current_date.month == 12:
-                    current_date = current_date.replace(
-                        year=current_date.year + 1, month=1
-                    )
-                else:
-                    current_date = current_date.replace(month=current_date.month + 1)
-            elif pattern == RecurrencePattern.YEARLY:
-                current_date = current_date.replace(year=current_date.year + 1)
-
-            if remaining_occurrences and i + 1 >= remaining_occurrences:
-                break
-
-        return upcoming_dates
+        """Generate upcoming execution dates within the next months_ahead months."""
+        limit = 20  # Cap for performance
+        if remaining_occurrences:
+            limit = min(limit, remaining_occurrences)
+        return occurrence_dates(
+            next_date,
+            pattern,
+            interval,
+            until=add_months(datetime.now(), months_ahead),
+            limit=limit,
+        )
 
     async def _get_category_name(self, category_id: int | None) -> str | None:
         """Get category name from cache or database."""
@@ -670,7 +645,7 @@ class ScheduledTransactionService:
             scheduled_transactions = await self.get_scheduled_transactions()
 
             # Calculate period end date
-            period_end = next_salary_date + timedelta(days=planning_horizon_months * 30)
+            period_end = add_months(next_salary_date, planning_horizon_months)
 
             # Categorize commitments by type
             finite_commitments = []

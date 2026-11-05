@@ -1,25 +1,25 @@
 """Service for budget operations and spending analysis."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 import logging
-from typing import Any, ClassVar
+from typing import Any
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.budget import (
-    BudgetAnalysisResponse,
     BudgetCategoryBreakdown,
     BudgetModel,
     BudgetPeriod,
     BudgetStatus,
     BudgetVsActualItem,
-    BudgetVsActualResponse,
 )
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+from moneywiz_mcp_server.models.scheduled_transaction import RecurrencePattern
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
 )
+from moneywiz_mcp_server.utils.recurrence import recurrence_from_duration
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +27,19 @@ logger = logging.getLogger(__name__)
 # not stable across MoneyWiz versions/exports.
 BUDGET_ENTITY_NAME = "Budget"
 
+# Budgets share MoneyWiz's duration unit encoding with scheduled transactions;
+# map the decoded pattern to a BudgetPeriod explicitly so the two enums can
+# evolve independently.
+BUDGET_PERIOD_BY_PATTERN: dict[RecurrencePattern, BudgetPeriod] = {
+    RecurrencePattern.DAILY: BudgetPeriod.DAILY,
+    RecurrencePattern.WEEKLY: BudgetPeriod.WEEKLY,
+    RecurrencePattern.MONTHLY: BudgetPeriod.MONTHLY,
+    RecurrencePattern.YEARLY: BudgetPeriod.YEARLY,
+}
+
 
 class BudgetService:
     """Service for budget operations and spending analysis."""
-
-    # Duration units mapping (same as scheduled transactions)
-    DURATION_UNITS: ClassVar[dict[int, BudgetPeriod]] = {
-        1: BudgetPeriod.DAILY,
-        2: BudgetPeriod.WEEKLY,
-        4: BudgetPeriod.YEARLY,
-        8: BudgetPeriod.MONTHLY,
-    }
 
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
@@ -123,8 +125,12 @@ class BudgetService:
                 return None  # Skip zero or negative budgets
 
             # Determine period from ZDURATIONUNITS
-            duration_units = record.get("ZDURATIONUNITS", 8)
-            period = self.DURATION_UNITS.get(duration_units, BudgetPeriod.MONTHLY)
+            # Decode unit and count together, like scheduled transactions, so
+            # "every 7 days" is weekly. BudgetPeriod has no interval field.
+            pattern, _ = recurrence_from_duration(
+                record.get("ZDURATIONUNITS"), record.get("ZDURATION")
+            )
+            period = BUDGET_PERIOD_BY_PATTERN[pattern]
 
             # Get categories linked to this budget
             categories = await self._get_budget_categories(budget_pk)
