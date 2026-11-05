@@ -269,3 +269,11 @@ class TestBudgetServiceFilters:
         )
         result = await budget_service._matches_filters(budget, None, "weekly")
         assert result is False
+
+
+def test_every_recurrence_pattern_has_a_budget_period():
+    """Adding a RecurrencePattern must not break budget decoding."""
+    from moneywiz_mcp_server.models.scheduled_transaction import RecurrencePattern
+    from moneywiz_mcp_server.services.budget_service import BUDGET_PERIOD_BY_PATTERN
+
+    assert set(BUDGET_PERIOD_BY_PATTERN) == set(RecurrencePattern)

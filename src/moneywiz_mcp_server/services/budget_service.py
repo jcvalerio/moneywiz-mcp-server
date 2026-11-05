@@ -1,21 +1,20 @@
 """Service for budget operations and spending analysis."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 import logging
-from typing import Any, ClassVar
+from typing import Any
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.budget import (
-    BudgetAnalysisResponse,
     BudgetCategoryBreakdown,
     BudgetModel,
     BudgetPeriod,
     BudgetStatus,
     BudgetVsActualItem,
-    BudgetVsActualResponse,
 )
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+from moneywiz_mcp_server.models.scheduled_transaction import RecurrencePattern
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
@@ -27,6 +26,16 @@ logger = logging.getLogger(__name__)
 # Entity name used to resolve the Budget Z_ENT id dynamically, since it is
 # not stable across MoneyWiz versions/exports.
 BUDGET_ENTITY_NAME = "Budget"
+
+# Budgets share MoneyWiz's duration unit encoding with scheduled transactions;
+# map the decoded pattern to a BudgetPeriod explicitly so the two enums can
+# evolve independently.
+BUDGET_PERIOD_BY_PATTERN: dict[RecurrencePattern, BudgetPeriod] = {
+    RecurrencePattern.DAILY: BudgetPeriod.DAILY,
+    RecurrencePattern.WEEKLY: BudgetPeriod.WEEKLY,
+    RecurrencePattern.MONTHLY: BudgetPeriod.MONTHLY,
+    RecurrencePattern.YEARLY: BudgetPeriod.YEARLY,
+}
 
 
 class BudgetService:
@@ -117,7 +126,7 @@ class BudgetService:
 
             # Determine period from ZDURATIONUNITS
             pattern = pattern_from_duration_unit(record.get("ZDURATIONUNITS"))
-            period = BudgetPeriod(pattern.value)
+            period = BUDGET_PERIOD_BY_PATTERN[pattern]
 
             # Get categories linked to this budget
             categories = await self._get_budget_categories(budget_pk)

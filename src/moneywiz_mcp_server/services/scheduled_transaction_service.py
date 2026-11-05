@@ -1,6 +1,6 @@
 """Service for scheduled transaction operations and occurrence tracking."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 import logging
@@ -12,14 +12,12 @@ from moneywiz_mcp_server.models.scheduled_transaction import (
     CommitmentBreakdown,
     RecurrenceEndCondition,
     RecurrencePattern,
-    SalaryBreakdownResponse,
     ScheduledTransactionModel,
     WeekendHandling,
 )
 from moneywiz_mcp_server.models.transaction import TransactionType
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
-    datetime_to_core_data_timestamp,
 )
 from moneywiz_mcp_server.utils.recurrence import (
     add_months,

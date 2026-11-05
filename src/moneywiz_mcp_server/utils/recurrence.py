@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 # MoneyWiz stores recurrence units (ZDURATIONUNITS / ZDURATIONUNITS1) as
 # Foundation NSCalendarUnit flags, with the count in ZDURATION / ZDURATION1.
 # "Every 2 weeks" is typically stored as 14 days.
+#
+# Verified against a MoneyWiz 3 database: scheduled transactions use 4, 8 and
+# 16 (16 with counts 7 and 14 for weekly/biweekly), budgets use 8. Codes 1 and
+# 2 never occur; 2 is NSCalendarUnitEra and 1 is not a calendar unit, so the
+# old 1=daily / 2=weekly mapping was a guess and is intentionally not kept.
 NS_CALENDAR_UNIT_YEAR = 4
 NS_CALENDAR_UNIT_MONTH = 8
 NS_CALENDAR_UNIT_DAY = 16
