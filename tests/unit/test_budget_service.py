@@ -150,12 +150,37 @@ class TestBudgetService:
 class TestBudgetServiceHelpers:
     """Test cases for BudgetService helper methods."""
 
-    def test_duration_units_mapping(self, budget_service):
-        """Test that duration units are mapped correctly."""
-        assert budget_service.DURATION_UNITS[1] == BudgetPeriod.DAILY
-        assert budget_service.DURATION_UNITS[2] == BudgetPeriod.WEEKLY
-        assert budget_service.DURATION_UNITS[4] == BudgetPeriod.YEARLY
-        assert budget_service.DURATION_UNITS[8] == BudgetPeriod.MONTHLY
+    @pytest.mark.parametrize(
+        ("unit_code", "count", "period"),
+        [
+            (16, 1, BudgetPeriod.DAILY),
+            (16, 7, BudgetPeriod.WEEKLY),
+            (16, 14, BudgetPeriod.WEEKLY),
+            (8192, 1, BudgetPeriod.WEEKLY),
+            (8, 1, BudgetPeriod.MONTHLY),
+            (8, None, BudgetPeriod.MONTHLY),
+            (4, 1, BudgetPeriod.YEARLY),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_budget_period_from_duration_unit(
+        self, budget_service, mock_db_manager, unit_code, count, period
+    ):
+        """Budget periods decode MoneyWiz NSCalendarUnit duration codes."""
+        mock_db_manager.execute_query.return_value = []
+        budget_service._calculate_spent_amount = AsyncMock(
+            return_value={"spent": Decimal("0"), "count": 0}
+        )
+        model = await budget_service._convert_record_to_model(
+            {
+                "Z_PK": 1,
+                "ZOPENINGBALANCE1": 100,
+                "ZDURATIONUNITS": unit_code,
+                "ZDURATION": count,
+            }
+        )
+        assert model is not None
+        assert model.period == period
 
     def test_generate_recommendations_over_budget(self, budget_service):
         """Test recommendations for over budget scenarios."""
@@ -252,3 +277,11 @@ class TestBudgetServiceFilters:
         )
         result = await budget_service._matches_filters(budget, None, "weekly")
         assert result is False
+
+
+def test_every_recurrence_pattern_has_a_budget_period():
+    """Adding a RecurrencePattern must not break budget decoding."""
+    from moneywiz_mcp_server.models.scheduled_transaction import RecurrencePattern
+    from moneywiz_mcp_server.services.budget_service import BUDGET_PERIOD_BY_PATTERN
+
+    assert set(BUDGET_PERIOD_BY_PATTERN) == set(RecurrencePattern)

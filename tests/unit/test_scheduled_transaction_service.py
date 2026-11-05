@@ -1,5 +1,6 @@
 """Unit tests for ScheduledTransactionService."""
 
+import calendar
 from datetime import datetime, timedelta
 from decimal import Decimal
 import sqlite3
@@ -15,8 +16,11 @@ from moneywiz_mcp_server.models.scheduled_transaction import (
     TransactionType,
 )
 from moneywiz_mcp_server.services.scheduled_transaction_service import (
+    ScheduledEntityRole,
     ScheduledTransactionService,
 )
+from moneywiz_mcp_server.utils.core_data_time import datetime_to_core_data_timestamp
+from moneywiz_mcp_server.utils.recurrence import add_months
 
 
 @pytest.fixture
@@ -164,27 +168,71 @@ class TestScheduledTransactionService:
         # Check that salary amount is properly set
         assert result["salary_amount"]["USD"] == salary_amount
 
-    def test_infer_recurrence_pattern(self, scheduled_service):
-        """Test recurrence pattern inference from database record."""
-        # Test monthly pattern (ZDURATIONUNITS1 = 8)
-        record = {"ZDURATIONUNITS1": 8, "ZDURATION1": 1}
-        result = scheduled_service._infer_recurrence_pattern_from_duration(record)
-        assert result == RecurrencePattern.MONTHLY
+    @pytest.mark.parametrize(
+        ("unit_code", "count", "pattern", "interval"),
+        [
+            (8, 1, RecurrencePattern.MONTHLY, 1),
+            (8, 4, RecurrencePattern.MONTHLY, 4),
+            (4, 1, RecurrencePattern.YEARLY, 1),
+            (16, 1, RecurrencePattern.DAILY, 1),
+            (16, 7, RecurrencePattern.WEEKLY, 1),
+            (16, 14, RecurrencePattern.WEEKLY, 2),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_convert_record_uses_unit_and_interval(
+        self,
+        scheduled_service,
+        mock_db_manager,
+        sample_database_record,
+        unit_code,
+        count,
+        pattern,
+        interval,
+    ):
+        """Duration unit and ZDURATION1 interval reach the model."""
+        mock_db_manager.execute_query.return_value = []
+        record = {
+            **sample_database_record,
+            "ZDURATIONUNITS1": unit_code,
+            "ZDURATION1": count,
+        }
+        model = await scheduled_service._convert_record_to_model(
+            record, 34, ScheduledEntityRole.REGULAR
+        )
+        assert model is not None
+        assert model.recurrence_pattern == pattern
+        assert model.recurrence_interval == interval
 
-        # Test weekly pattern (ZDURATIONUNITS1 = 2)
-        record = {"ZDURATIONUNITS1": 2, "ZDURATION1": 1}
-        result = scheduled_service._infer_recurrence_pattern_from_duration(record)
-        assert result == RecurrencePattern.WEEKLY
-
-        # Test daily pattern (ZDURATIONUNITS1 = 1)
-        record = {"ZDURATIONUNITS1": 1, "ZDURATION1": 1}
-        result = scheduled_service._infer_recurrence_pattern_from_duration(record)
-        assert result == RecurrencePattern.DAILY
-
-        # Test yearly pattern (ZDURATIONUNITS1 = 4)
-        record = {"ZDURATIONUNITS1": 4, "ZDURATION1": 1}
-        result = scheduled_service._infer_recurrence_pattern_from_duration(record)
-        assert result == RecurrencePattern.YEARLY
+    @pytest.mark.asyncio
+    async def test_convert_record_keeps_month_end_schedule(
+        self, scheduled_service, mock_db_manager, sample_database_record
+    ):
+        """Regression for #60: a schedule on the 31st is not dropped."""
+        mock_db_manager.execute_query.return_value = []
+        # The next 31st after today, so the following month is always short
+        # (30 days or February) and inside the 6-month upcoming window.
+        next_date = datetime.now().replace(
+            day=1, hour=12, minute=0, second=0, microsecond=0
+        )
+        while True:
+            next_date = add_months(next_date, 1)
+            if calendar.monthrange(next_date.year, next_date.month)[1] == 31:
+                following = add_months(next_date, 1)
+                if calendar.monthrange(following.year, following.month)[1] < 31:
+                    break
+        next_date = next_date.replace(day=31)
+        record = {
+            **sample_database_record,
+            "ZEXECUTEDATE": datetime_to_core_data_timestamp(next_date),
+        }
+        model = await scheduled_service._convert_record_to_model(
+            record, 34, ScheduledEntityRole.REGULAR
+        )
+        assert model is not None
+        assert len(model.upcoming_dates) >= 2
+        second = model.upcoming_dates[1]
+        assert second.day == calendar.monthrange(second.year, second.month)[1]
 
     def test_infer_transaction_type(self, scheduled_service):
         """Test transaction type inference from amount."""

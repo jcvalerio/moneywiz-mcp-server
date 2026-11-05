@@ -3,13 +3,13 @@
 from datetime import datetime, timedelta
 import re
 
-from dateutil.relativedelta import relativedelta
-
+from moneywiz_mcp_server.models.scheduled_transaction import RecurrencePattern
 from moneywiz_mcp_server.models.transaction import DateRange
 from moneywiz_mcp_server.utils.core_data_time import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
 )
+from moneywiz_mcp_server.utils.recurrence import shift
 
 # MoneyWiz stores dates relative to 2001-01-01, so it holds no earlier data.
 EARLIEST_DATE = datetime(2001, 1, 1)
@@ -24,18 +24,18 @@ _RELATIVE_PERIOD = re.compile(
 )
 
 
+_PHRASE_UNITS = {
+    "day": RecurrencePattern.DAILY,
+    "week": RecurrencePattern.WEEKLY,
+    "month": RecurrencePattern.MONTHLY,
+    "year": RecurrencePattern.YEARLY,
+}
+
+
 def _go_back(now: datetime, count: int, unit: str) -> datetime:
     """Return now minus count units, never earlier than EARLIEST_DATE."""
     try:
-        if unit == "day":
-            delta = relativedelta(days=count)
-        elif unit == "week":
-            delta = relativedelta(weeks=count)
-        elif unit == "month":
-            delta = relativedelta(months=count)
-        else:
-            delta = relativedelta(years=count)
-        start = now - delta
+        start = shift(now, _PHRASE_UNITS[unit], -count)
     except (ValueError, OverflowError):
         return EARLIEST_DATE
     return max(start, EARLIEST_DATE)
