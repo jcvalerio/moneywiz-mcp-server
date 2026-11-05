@@ -735,16 +735,14 @@ async def get_scheduled_transactions(
                     recurrence_pattern=transaction.recurrence_pattern.value,
                     recurrence_interval=transaction.recurrence_interval,
                     upcoming_dates=transaction.upcoming_dates,
-                    next_execution_date=transaction.next_execution_date.isoformat(),
+                    next_execution_date=transaction.next_execution_date,
                     transaction_type=transaction.transaction_type.value,
                     tags=transaction.tags,
                     end_condition=transaction.end_condition.value,
                     total_occurrences=transaction.total_occurrences,
                     completed_occurrences=transaction.completed_occurrences,
                     remaining_occurrences=transaction.remaining_occurrences,
-                    final_execution_date=transaction.final_execution_date.isoformat()
-                    if transaction.final_execution_date
-                    else None,
+                    final_execution_date=transaction.final_execution_date,
                     is_active=transaction.is_active,
                     commitment_type=transaction.commitment_type,
                     urgency_level=transaction.urgency_level,

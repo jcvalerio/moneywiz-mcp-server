@@ -9,12 +9,15 @@ only show up in the desktop app.
 """
 
 from datetime import datetime
+import os
+import time
 import typing
 
 from pydantic import BaseModel, TypeAdapter
 import pytest
 
 from moneywiz_mcp_server.main import mcp
+from moneywiz_mcp_server.models.scheduled_transaction import CommitmentBreakdown
 
 NAIVE = datetime(2027, 1, 31, 12, 0)
 
@@ -87,36 +90,42 @@ def test_datetime_fields_serialize_with_utc_offset(field_name, annotation):
     assert parsed.timestamp() == NAIVE.timestamp(), field_name
 
 
-@pytest.mark.parametrize("tz", ["America/Costa_Rica", "Asia/Kolkata", "UTC"])
-def test_naive_dates_get_the_local_offset(monkeypatch, tz):
+@pytest.fixture
+def local_tz():
+    """Set the process timezone, restoring TZ and re-running tzset() after."""
+    original = os.environ.get("TZ")
+
+    def _set(tz: str) -> None:
+        os.environ["TZ"] = tz
+        time.tzset()
+
+    yield _set
+    if original is None:
+        os.environ.pop("TZ", None)
+    else:
+        os.environ["TZ"] = original
+    time.tzset()
+
+
+@pytest.mark.parametrize(
+    ("tz", "offset"),
+    [("America/Costa_Rica", "-06:00"), ("Asia/Kolkata", "+05:30"), ("UTC", "+00:00")],
+)
+def test_naive_dates_get_the_local_offset(local_tz, tz, offset):
     """Naive datetimes are local time; the offset must match the machine's
     zone, not UTC (CI runs in UTC, so set TZ explicitly)."""
-    import time
-
-    from moneywiz_mcp_server.models.scheduled_transaction import CommitmentBreakdown
-
-    monkeypatch.setenv("TZ", tz)
-    time.tzset()
-    try:
-        payload = CommitmentBreakdown(
-            description="x",
-            amount=1,
-            currency="USD",
-            category="c",
-            next_date=NAIVE,
-            payments_in_period=1,
-            total_impact_in_period=1,
-            commitment_type="infinite",
-            urgency_level="regular",
-        ).model_dump(mode="json")
-        expected = {
-            "America/Costa_Rica": "-06:00",
-            "Asia/Kolkata": "+05:30",
-            "UTC": "+00:00",
-        }[tz]
-        assert payload["next_date"] == f"2027-01-31T12:00:00{expected}"
-        # Python-mode dumps keep real datetimes for internal callers.
-        assert CommitmentBreakdown.model_validate(payload).next_date.tzinfo
-    finally:
-        monkeypatch.delenv("TZ")
-        time.tzset()
+    local_tz(tz)
+    payload = CommitmentBreakdown(
+        description="x",
+        amount=1,
+        currency="USD",
+        category="c",
+        next_date=NAIVE,
+        payments_in_period=1,
+        total_impact_in_period=1,
+        commitment_type="infinite",
+        urgency_level="regular",
+    ).model_dump(mode="json")
+    assert payload["next_date"] == f"2027-01-31T12:00:00{offset}"
+    # Python-mode dumps keep real datetimes for internal callers.
+    assert CommitmentBreakdown.model_validate(payload).next_date.tzinfo

@@ -206,7 +206,7 @@ class ScheduledTransactionResponse(BaseModel):
         default_factory=list,
         description="Upcoming execution dates in the next 6 months (max 20)",
     )
-    next_execution_date: str = Field(..., description="Next execution date (ISO)")
+    next_execution_date: ApiDateTime = Field(..., description="Next execution date")
     transaction_type: str = Field(..., description="Transaction type")
     tags: list[str] = Field(default_factory=list, description="Transaction tags")
 
@@ -215,8 +215,8 @@ class ScheduledTransactionResponse(BaseModel):
     total_occurrences: int | None = Field(None, description="Total planned occurrences")
     completed_occurrences: int = Field(..., description="Completed occurrences")
     remaining_occurrences: int | None = Field(None, description="Remaining occurrences")
-    final_execution_date: str | None = Field(
-        None, description="Final execution date (ISO)"
+    final_execution_date: ApiDateTime | None = Field(
+        None, description="Final execution date"
     )
 
     is_active: bool = Field(..., description="Whether schedule is active")
