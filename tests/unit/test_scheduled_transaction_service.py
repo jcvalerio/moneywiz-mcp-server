@@ -154,6 +154,7 @@ class TestScheduledTransactionService:
             next_salary_date=next_salary_date,
             salary_amount=salary_amount,
             planning_horizon_months=3,
+            salary_currency="USD",
         )
 
         assert "salary_amount" in result
@@ -395,13 +396,13 @@ class TestScheduledTransactionService:
         recommendations = scheduled_service._generate_salary_recommendations(
             "insufficient", ending_soon, finite
         )
-        assert any("exceed your salary" in rec for rec in recommendations)
+        assert any("exceed your income" in rec for rec in recommendations)
 
         # Test tight coverage
         recommendations = scheduled_service._generate_salary_recommendations(
             "tight", ending_soon, finite
         )
-        assert any("budget is tight" in rec for rec in recommendations)
+        assert any("Less than 10% of your income" in rec for rec in recommendations)
 
         # Test with ending soon commitments
         recommendations = scheduled_service._generate_salary_recommendations(
