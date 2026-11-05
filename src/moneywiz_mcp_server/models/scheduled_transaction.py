@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .base import BaseCurrencyResponse
+from .base import ApiDateTime, BaseCurrencyResponse
 from .currency_types import CurrencyAmounts
 from .transaction import TransactionType
 
@@ -155,13 +155,13 @@ class CommitmentBreakdown(BaseModel):
     amount: Decimal = Field(..., description="Commitment amount")
     currency: str = Field(..., description="Currency code")
     category: str = Field(..., description="Expense category")
-    next_date: datetime = Field(..., description="Next execution date")
+    next_date: ApiDateTime = Field(..., description="Next execution date")
 
     # Occurrence Intelligence (KEY FEATURE)
     remaining_payments: int | None = Field(
         None, description="Remaining payments (None if infinite)"
     )
-    final_payment_date: datetime | None = Field(
+    final_payment_date: ApiDateTime | None = Field(
         None, description="Date of final payment"
     )
     payments_in_period: int = Field(
@@ -197,6 +197,15 @@ class ScheduledTransactionResponse(BaseModel):
     payee: str = Field(..., description="Transaction payee")
     account_id: str = Field(..., description="Associated account ID")
     recurrence_pattern: str = Field(..., description="Recurrence pattern")
+    recurrence_interval: int = Field(
+        default=1,
+        description="Repeats every N recurrence_pattern units "
+        "(e.g. weekly with interval 2 = every 2 weeks)",
+    )
+    upcoming_dates: list[ApiDateTime] = Field(
+        default_factory=list,
+        description="Upcoming execution dates in the next 6 months (max 20)",
+    )
     next_execution_date: str = Field(..., description="Next execution date (ISO)")
     transaction_type: str = Field(..., description="Transaction type")
     tags: list[str] = Field(default_factory=list, description="Transaction tags")

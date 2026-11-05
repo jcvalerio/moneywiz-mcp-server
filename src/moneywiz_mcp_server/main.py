@@ -733,6 +733,8 @@ async def get_scheduled_transactions(
                     payee=transaction.payee,
                     account_id=transaction.account_id,
                     recurrence_pattern=transaction.recurrence_pattern.value,
+                    recurrence_interval=transaction.recurrence_interval,
+                    upcoming_dates=transaction.upcoming_dates,
                     next_execution_date=transaction.next_execution_date.isoformat(),
                     transaction_type=transaction.transaction_type.value,
                     tags=transaction.tags,

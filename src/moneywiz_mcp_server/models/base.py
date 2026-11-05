@@ -1,11 +1,32 @@
 """Base models for MoneyWiz MCP Server responses."""
 
+from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, PlainSerializer, field_serializer
 
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
+
+
+def _to_rfc3339(value: datetime) -> str:
+    """ISO 8601 with a UTC offset; naive values are taken as local time.
+
+    Naive datetimes here come from core_data_timestamp_to_datetime, which
+    returns local time, so astimezone() attaches the correct offset.
+    """
+    if value.tzinfo is None:
+        value = value.astimezone()
+    return value.isoformat()
+
+
+# Use for every datetime field in a tool response model. Pydantic declares
+# datetime as JSON Schema "date-time", which (RFC 3339) requires an offset;
+# strict MCP clients such as Claude Desktop reject output that lacks one.
+# tests/unit/test_tool_output_dates.py enforces this for all tool outputs.
+ApiDateTime = Annotated[
+    datetime, PlainSerializer(_to_rfc3339, return_type=str, when_used="json")
+]
 
 
 class BaseAnalysisResponse(BaseModel):
