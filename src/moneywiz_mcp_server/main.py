@@ -808,6 +808,7 @@ async def analyze_salary_breakdown(
     display_currency: str | None = None,
     exchange_rates: dict[str, float] | None = None,
     count_savings_as_commitments: bool = True,
+    count_loan_principal: bool = True,
 ) -> SalaryBreakdownResponse:
     """
     Analyze whether income covers scheduled commitments over a planning period.
@@ -838,6 +839,10 @@ async def analyze_salary_breakdown(
             1 display_currency, e.g. {"CRC": 505} with display_currency USD
         count_savings_as_commitments: Count bank -> Investment transfers
             (e.g. retirement contributions) as commitments (default true)
+        count_loan_principal: Count the principal part of loan payments as a
+            commitment (default true). False gives the pure expense view:
+            only interest, insurance and fees. Loan payments are split with
+            their MoneyWiz payment plan
 
     Returns:
         Income and commitments per currency, combined totals with the
@@ -866,6 +871,7 @@ async def analyze_salary_breakdown(
                 display_currency=display_currency,
                 exchange_rates=exchange_rates,
                 count_savings_as_commitments=count_savings_as_commitments,
+                count_loan_principal=count_loan_principal,
             )
 
             return SalaryBreakdownResponse(**breakdown_data)

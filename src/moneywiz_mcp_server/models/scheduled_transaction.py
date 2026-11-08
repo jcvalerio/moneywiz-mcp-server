@@ -72,6 +72,12 @@ class ScheduledTransactionModel(BaseModel):
     recipient_account_id: str | None = Field(
         None, description="Destination account ID (transfers only)"
     )
+    recipient_account_name: str | None = Field(
+        None, description="Destination account name (transfers only)"
+    )
+    payment_plan_id: int | None = Field(
+        None, description="MoneyWiz loan payment plan this schedule belongs to"
+    )
     category: str = Field(..., description="Transaction leaf category")
     category_id: int | None = Field(None, description="Transaction category ID")
     parent_category: str | None = Field(None, description="Immediate parent category")
@@ -215,8 +221,19 @@ class CommitmentBreakdown(BaseModel):
     )
     kind: str = Field(
         "expense",
-        description="expense (scheduled withdrawal), debt_payment (bank -> Loan "
-        "account) or savings (bank -> Investment account)",
+        description="expense (scheduled withdrawal); loan_payment (bank -> Loan, "
+        "split into principal and cost); debt_payment (bank -> Loan that can't "
+        "be split); or savings (bank -> Investment account)",
+    )
+    principal_in_period: Decimal | None = Field(
+        None,
+        description="Loan payments only: the part that pays down the debt, from "
+        "the MoneyWiz payment plan",
+    )
+    cost_in_period: Decimal | None = Field(
+        None,
+        description="Loan payments only: interest (from the plan when it has the "
+        "month's payment), insurance and fees",
     )
 
 
@@ -379,8 +396,10 @@ class SalaryBreakdownResponse(BaseCurrencyResponse):
     )
     commitments_by_kind: dict[str, CurrencyAmounts] = Field(
         default_factory=dict,
-        description="Commitments in the period split into expense, debt_payment "
-        "and savings, by currency",
+        description="Commitments in the period by kind and currency: expense, "
+        "loan_principal and loan_cost (loan payments split with their MoneyWiz "
+        "payment plan), debt_payment (loan payments that can't be split) and "
+        "savings",
     )
     transfers_in_period: dict[str, CurrencyAmounts] = Field(
         default_factory=dict,
@@ -393,6 +412,11 @@ class SalaryBreakdownResponse(BaseCurrencyResponse):
         default_factory=list,
         description="Transfers whose account types fit no rule; check those "
         "account types in MoneyWiz",
+    )
+    loan_payment_notes: list[str] = Field(
+        default_factory=list,
+        description="Loan payments that couldn't be split into principal and "
+        "cost, and where the plan's interest differs from the scheduled split",
     )
     display_currency: str | None = Field(
         None, description="Currency the combined totals are expressed in"
