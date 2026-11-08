@@ -488,8 +488,10 @@ class TestScheduledCategoryAgainstSqlite:
         await db.initialize()
         try:
             service = ScheduledTransactionService(db)
-            assert await service._get_category_id_for_scheduled({"Z_PK": 500}) == 42
-            assert await service._get_category_id_for_scheduled({"Z_PK": 501}) is None
+            assert await service._get_category_assignments({"Z_PK": 500}) == [
+                (42, Decimal("10.0"))
+            ]
+            assert await service._get_category_assignments({"Z_PK": 501}) == []
         finally:
             await db.close()
 

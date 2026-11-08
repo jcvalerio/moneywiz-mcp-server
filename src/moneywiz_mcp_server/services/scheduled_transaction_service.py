@@ -418,7 +418,11 @@ class ScheduledTransactionService:
         if len(assignments) > 1:
             splits = []
             for split_id, amount in assignments:
-                split_info = await self._build_category_info(split_id)
+                split_info = (
+                    info
+                    if split_id == category_id
+                    else await self._build_category_info(split_id)
+                )
                 splits.append(
                     CategorySplit(
                         category=split_info["category"] or "Uncategorized",
@@ -429,12 +433,6 @@ class ScheduledTransactionService:
                 )
             info["category_splits"] = splits
         return info
-
-    async def _get_category_id_for_scheduled(
-        self, record: dict[str, Any]
-    ) -> int | None:
-        """The main category ID of a scheduled transaction (largest split)."""
-        return self._primary_category_id(await self._get_category_assignments(record))
 
     @staticmethod
     def _primary_category_id(
