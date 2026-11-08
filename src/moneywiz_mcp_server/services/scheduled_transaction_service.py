@@ -730,7 +730,7 @@ class ScheduledTransactionService:
 
         return f"Payee_{payee_id}"
 
-    async def _get_account_kinds(self) -> dict[str, AccountKind]:
+    async def get_account_kinds(self) -> dict[str, AccountKind]:
         """Account Z_PK (as str) -> kind, from each account's entity type."""
         entity_map = await self.db_manager.get_entity_name_map()
         kind_by_ent = {
@@ -748,7 +748,7 @@ class ScheduledTransactionService:
         return {str(row["Z_PK"]): kind_by_ent[row["Z_ENT"]] for row in rows}
 
     @staticmethod
-    def _transfer_kind(
+    def transfer_kind(
         transfer: ScheduledTransactionModel,
         account_kinds: dict[str, AccountKind],
     ) -> TransferKind:
@@ -931,7 +931,7 @@ class ScheduledTransactionService:
         ending_soon_commitments: list[CommitmentBreakdown] = []
         commitments_by_currency: dict[str, Decimal] = {}
 
-        account_kinds = await self._get_account_kinds() if transfers else {}
+        account_kinds = await self.get_account_kinds() if transfers else {}
         transfers_by_kind: dict[str, dict[str, Decimal]] = {}
         unclassified: list[str] = []
         counted: list[tuple[ScheduledTransactionModel, str, list[datetime]]] = [
@@ -941,7 +941,7 @@ class ScheduledTransactionService:
             dates = in_period(t)
             if not dates:
                 continue
-            kind = self._transfer_kind(t, account_kinds)
+            kind = self.transfer_kind(t, account_kinds)
             bucket = transfers_by_kind.setdefault(kind.value, {})
             bucket[t.currency] = bucket.get(t.currency, Decimal("0")) + abs(
                 t.amount
