@@ -336,7 +336,7 @@ class TestTransfers:
         )
         # Money flows mortgage -> bank: out of a loan, so not a payment.
         assert (
-            ScheduledTransactionService._transfer_kind(incoming, ACCOUNT_KINDS)
+            ScheduledTransactionService.transfer_kind(incoming, ACCOUNT_KINDS)
             is TransferKind.NON_CASH
         )
 

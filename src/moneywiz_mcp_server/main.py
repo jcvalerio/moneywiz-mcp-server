@@ -3,6 +3,7 @@
 # mypy: disable-error-code=misc
 
 from collections import defaultdict
+from datetime import datetime
 import logging
 from pathlib import Path
 import sys
@@ -929,9 +930,12 @@ async def analyze_monthly_cash_flow(
     try:
         db_manager = await get_db_manager()
         try:
-            from datetime import datetime
-
-            start = datetime.strptime(start_month, "%Y-%m") if start_month else None
+            try:
+                start = datetime.strptime(start_month, "%Y-%m") if start_month else None
+            except ValueError:
+                raise ValueError(
+                    f"start_month must be YYYY-MM, got {start_month!r}"
+                ) from None
             data = await CashFlowService(db_manager).analyze(
                 months=months,
                 start_month=start,

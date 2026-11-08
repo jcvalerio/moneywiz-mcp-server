@@ -748,7 +748,7 @@ class ScheduledTransactionService:
         return {str(row["Z_PK"]): kind_by_ent[row["Z_ENT"]] for row in rows}
 
     @staticmethod
-    def _transfer_kind(
+    def transfer_kind(
         transfer: ScheduledTransactionModel,
         account_kinds: dict[str, AccountKind],
     ) -> TransferKind:
@@ -941,7 +941,7 @@ class ScheduledTransactionService:
             dates = in_period(t)
             if not dates:
                 continue
-            kind = self._transfer_kind(t, account_kinds)
+            kind = self.transfer_kind(t, account_kinds)
             bucket = transfers_by_kind.setdefault(kind.value, {})
             bucket[t.currency] = bucket.get(t.currency, Decimal("0")) + abs(
                 t.amount

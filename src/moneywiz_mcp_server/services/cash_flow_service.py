@@ -129,13 +129,15 @@ class Card:
 
     def charges(self, start: datetime, end: datetime, now: datetime) -> Decimal:
         """What the card owes for the cycle (start, end]: recorded charges up to
-        now, plus scheduled charges after now."""
+        now, plus scheduled charges in the cycle. A scheduled date before now
+        is an overdue charge that hasn't run (a run schedule moves on to its
+        next date), so it isn't in the history yet and still counts."""
         owed = ZERO
         for when, amount, is_payment in self.history:
             if start < when <= min(end, now) and not is_payment:
                 owed -= amount  # charges are negative amounts
         for when, amount in self.scheduled_charges:
-            if max(start, now) < when <= end:
+            if start < when <= end:
                 owed += amount
         return owed
 
@@ -238,7 +240,7 @@ class CashFlowService:
                     )
                 continue
 
-            kind = ScheduledTransactionService._transfer_kind(t, kinds)
+            kind = ScheduledTransactionService.transfer_kind(t, kinds)
             if kind is TransferKind.DEBT_PAYMENT:
                 self._place(month_data, windows, dates, t, "loan_payment", amount)
             elif kind is TransferKind.SAVINGS:
@@ -271,7 +273,9 @@ class CashFlowService:
 
         starting = await self._starting_balance()
         balance: Decimal | None = None
-        if display_rates is not None:
+        # Today's balance is only a valid opening balance for the current month.
+        starts_now = windows[0][0] == datetime(now.year, now.month, 1)
+        if display_rates is not None and starts_now:
             converted = [display_rates.convert(a, c) for c, a in starting.items()]
             if all(v is not None for v in converted):
                 balance = sum((v for v in converted if v is not None), ZERO)
@@ -302,7 +306,12 @@ class CashFlowService:
             "cards_with_assumed_closing_day": assumed,
             "unclassified_transfers": sorted(set(unclassified)),
             "recommendations": self._recommendations(
-                months_out, assumed, sorted(without_rate), unclassified
+                months_out,
+                assumed,
+                sorted(without_rate),
+                unclassified,
+                budgets_failed=include_budgets and budgets is None,
+                balance_shown=starts_now,
             ),
         }
 
@@ -402,13 +411,13 @@ class CashFlowService:
 
     async def _budgets(
         self, windows: list[tuple[datetime, datetime]], now: datetime
-    ) -> list[dict[str, Decimal]]:
+    ) -> list[dict[str, Decimal]] | None:
         """Monthly budgets per month: unspent this month, in full later."""
         try:
             budgets = await BudgetService(self.db_manager).get_budgets()
         except Exception as e:
             logger.warning(f"Could not read budgets: {e}")
-            return [{} for _ in windows]
+            return None
         current = datetime(now.year, now.month, 1)
         out: list[dict[str, Decimal]] = []
         for start, _end in windows:
@@ -676,8 +685,17 @@ class CashFlowService:
         assumed: list[str],
         without_rate: list[str],
         unclassified: list[str],
+        budgets_failed: bool = False,
+        balance_shown: bool = True,
     ) -> list[str]:
         out: list[str] = []
+        if budgets_failed:
+            out.append("📌 Budgets couldn't be read, so budgets_remaining is empty.")
+        if not balance_shown:
+            out.append(
+                "📌 bank_balance_at_end is only projected when the first month "
+                "is the current one."
+            )
         for m in months:
             if m.verdict == "short" and m.totals is not None:
                 gap = -m.totals.left_after_obligations

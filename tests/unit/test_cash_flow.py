@@ -115,6 +115,7 @@ def run(monkeypatch):
         budgets=None,
         balance=None,
         months=3,
+        budgets_fail=False,
         **kwargs,
     ):
         service = CashFlowService(MagicMock(spec=DatabaseManager))
@@ -125,7 +126,9 @@ def run(monkeypatch):
             return_value={c.id: c for c in (cards or [])}
         )
         service._budgets = AsyncMock(
-            return_value=budgets or [{} for _ in range(months)]
+            return_value=None
+            if budgets_fail
+            else budgets or [{} for _ in range(months)]
         )
         service._starting_balance = AsyncMock(return_value=balance or {})
         monkeypatch.setattr(
@@ -338,6 +341,35 @@ class TestOtherRules:
         )
         assert usd(result["months"][NOV].income) == 0
         assert result["months"][NOV].verdict == "no_activity"
+
+    async def test_overdue_card_bill_counts_in_the_open_statement(self, run):
+        """A card bill dated earlier this month that hasn't run is still owed."""
+        result = await run(
+            [
+                bill("Overdue", "-60", datetime(2026, 11, 2), source="card"),
+                transfer("Visa", "-10", datetime(2026, 12, 5), destination="card"),
+            ],
+            cards=[card(closing_day=18)],
+            start_month=datetime(2026, 12, 1),
+            months=1,
+        )
+        [line] = result["months"][0].card_details
+        assert line.statement_amount == Decimal("60")
+
+    async def test_bank_balance_needs_the_current_month_first(self, run):
+        result = await run(
+            [income("1000", datetime(2027, 1, 20))],
+            balance={"USD": Decimal("2000")},
+            start_month=datetime(2027, 1, 1),
+            months=1,
+        )
+        assert result["months"][0].totals.bank_balance_at_end is None
+        assert any("current one" in r for r in result["recommendations"])
+
+    async def test_unreadable_budgets_are_reported(self, run):
+        result = await run([], months=1, budgets_fail=True)
+        assert result["months"][NOV].budgets_remaining.to_json_dict() == {}
+        assert any("Budgets couldn't be read" in r for r in result["recommendations"])
 
     def test_closing_dates_clamp_to_month_end(self):
         assert closing_date(2027, 2, 31) == datetime(2027, 2, 28, 23, 59, 59)
