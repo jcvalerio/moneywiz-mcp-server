@@ -27,6 +27,13 @@ from moneywiz_mcp_server.services.account_kinds import (
     classify_transfer,
 )
 from moneywiz_mcp_server.services.exchange_rate_service import ExchangeRateService
+from moneywiz_mcp_server.services.loan_plans import (
+    LoanPlans,
+    SplitStatus,
+    drift_is_material,
+    load_loan_plans,
+    split_payment,
+)
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
 )
@@ -302,6 +309,12 @@ class ScheduledTransactionService:
                 currency=record.get("ZCURRENCYNAME3", "USD"),
                 account_id=account_id,
                 recipient_account_id=recipient_account_id,
+                payment_plan_id=record.get("ZPAYMENTPLAN2"),
+                recipient_account_name=(
+                    await self._get_account_name(recipient)
+                    if recipient_account_id
+                    else None
+                ),
                 category=category_info["category"] or "Uncategorized",
                 category_id=category_info["category_id"],
                 parent_category=category_info["parent_category"],
@@ -615,6 +628,23 @@ class ScheduledTransactionService:
 
         return None
 
+    async def _get_account_name(self, account_id: int) -> str | None:
+        """Name of an account, cached."""
+        if account_id in self._account_cache:
+            return self._account_cache[account_id]
+        try:
+            rows = await self.db_manager.execute_query(
+                "SELECT ZNAME FROM ZSYNCOBJECT WHERE Z_PK = ?", (account_id,)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to resolve account name for {account_id}: {e}")
+            return None
+        name = rows[0].get("ZNAME") if rows else None
+        if isinstance(name, str):
+            self._account_cache[account_id] = name
+            return name
+        return None
+
     async def _get_payee_name(self, payee_id: int | None) -> str | None:
         """Get payee name from cache or database."""
         if not payee_id:
@@ -770,6 +800,7 @@ class ScheduledTransactionService:
         display_currency: str | None = None,
         exchange_rates: dict[str, float] | None = None,
         count_savings_as_commitments: bool = True,
+        count_loan_principal: bool = True,
     ) -> dict[str, Any]:
         """
         Compare income with outgoing commitments over a planning period.
@@ -953,12 +984,41 @@ class ScheduledTransactionService:
             ):
                 counted.append((t, kind.value, dates))
 
+        loan_plans = (
+            await load_loan_plans(self.db_manager)
+            if any(kind == TransferKind.DEBT_PAYMENT.value for _, kind, _ in counted)
+            else None
+        )
+        loan_notes: list[str] = []
         commitments_by_kind: dict[str, dict[str, Decimal]] = {}
+
+        def add_kind(kind: str, currency: str, value: Decimal) -> None:
+            if value:
+                bucket = commitments_by_kind.setdefault(kind, {})
+                bucket[currency] = bucket.get(currency, Decimal("0")) + value
+
         for t, commitment_kind, dates in counted:
             if not dates:
                 continue
             amount = abs(t.amount)
             total_impact = amount * len(dates)
+            principal_total: Decimal | None = None
+            cost_total: Decimal | None = None
+            if commitment_kind == TransferKind.DEBT_PAYMENT.value:
+                (
+                    commitment_kind,
+                    principal_total,
+                    cost_total,
+                    by_kind_parts,
+                ) = self._split_loan_payment(t, amount, dates, loan_plans, loan_notes)
+                if not count_loan_principal and principal_total:
+                    total_impact -= principal_total
+                for part_kind, value in by_kind_parts.items():
+                    if part_kind == "loan_principal" and not count_loan_principal:
+                        continue
+                    add_kind(part_kind, t.currency, value)
+            else:
+                add_kind(commitment_kind, t.currency, total_impact)
             commitment = CommitmentBreakdown(
                 description=t.description,
                 amount=amount,
@@ -973,9 +1033,9 @@ class ScheduledTransactionService:
                 urgency_level=t.urgency_level,
                 kind=commitment_kind,
                 category_splits=t.category_splits,
+                principal_in_period=principal_total,
+                cost_in_period=cost_total,
             )
-            by_kind = commitments_by_kind.setdefault(commitment_kind, {})
-            by_kind[t.currency] = by_kind.get(t.currency, Decimal("0")) + total_impact
             if t.commitment_type == "ending_soon":
                 ending_soon_commitments.append(commitment)
             elif t.commitment_type in ("finite", "one_time"):
@@ -1054,6 +1114,7 @@ class ScheduledTransactionService:
             without_rate=without_rate,
             unclassified=unclassified,
             replaced_income=replaced,
+            loan_notes=loan_notes,
         )
         commitment_end_analysis = self._analyze_commitment_endings(
             finite_commitments + ending_soon_commitments
@@ -1081,11 +1142,85 @@ class ScheduledTransactionService:
                 k: CurrencyAmounts(v) for k, v in transfers_by_kind.items()
             },
             "unclassified_transfers": unclassified,
+            "loan_payment_notes": loan_notes,
             "display_currency": display,
             "totals_in_display_currency": totals,
             "exchange_rates_used": rates_used,
             "currencies_without_rate": without_rate,
         }
+
+    @staticmethod
+    def _split_loan_payment(
+        t: ScheduledTransactionModel,
+        amount: Decimal,
+        dates: list[datetime],
+        plans: LoanPlans | None,
+        notes: list[str],
+    ) -> tuple[str, Decimal | None, Decimal | None, dict[str, Decimal]]:
+        """Split a bank -> Loan payment's occurrences into principal and cost.
+
+        Returns (kind, principal, cost, amounts by kind). Occurrences that
+        can't be split stay debt_payment in full.
+        """
+        plan = (
+            plans.for_payment(t.payment_plan_id, t.recipient_account_id)
+            if plans is not None
+            else None
+        )
+        label = (
+            f"{t.description} ({t.recipient_account_name})"
+            if t.recipient_account_name
+            else t.description
+        )
+        principal = cost = unsplit = Decimal("0")
+        drift_months: list[str] = []
+        statuses: set[SplitStatus] = set()
+        for when in dates:
+            part = split_payment(amount, t.category_splits, plan, when)
+            statuses.add(part.status)
+            if part.status is SplitStatus.UNSPLIT:
+                unsplit += amount
+                continue
+            principal += part.principal
+            cost += part.cost
+            if drift_is_material(part.interest_drift, amount):
+                drift_months.append(
+                    f"{when:%Y-%m} ({part.interest_drift:+,.2f} {t.currency})"
+                )
+
+        if plan is None:
+            notes.append(
+                f"{label}: no MoneyWiz payment plan, so it can't be split "
+                "into principal and cost; counted in full as debt_payment."
+            )
+        elif SplitStatus.NO_PRINCIPAL_SPLIT in statuses:
+            notes.append(
+                f"{label}: none of its categories is the payment plan's "
+                "principal category, so all of it counts as cost. Check its "
+                "category splits."
+            )
+        elif SplitStatus.UNSPLIT in statuses:
+            notes.append(
+                f"{label}: the payment plan has no payment for some "
+                "months and the schedule has no category splits; those months "
+                "count in full as debt_payment."
+            )
+        if drift_months:
+            notes.append(
+                f"{label}: the plan's interest differs from the "
+                f"scheduled interest split in {', '.join(drift_months)}; the "
+                "plan's interest is used. Update the schedule's split amounts "
+                "to match."
+            )
+
+        parts = {
+            "loan_principal": principal,
+            "loan_cost": cost,
+            "debt_payment": unsplit,
+        }
+        if principal == cost == 0:
+            return "debt_payment", None, None, parts
+        return "loan_payment", principal, cost, parts
 
     @staticmethod
     def _coverage(income: Decimal, commitments: Decimal) -> str:
@@ -1115,6 +1250,7 @@ class ScheduledTransactionService:
         without_rate: list[str] | None = None,
         unclassified: list[str] | None = None,
         replaced_income: list[str] | None = None,
+        loan_notes: list[str] | None = None,
     ) -> list[str]:
         """Generate salary recommendations; amounts are kept per currency."""
         recommendations = []
@@ -1154,6 +1290,14 @@ class ScheduledTransactionService:
                 "types that fit no rule and are left out of commitments: "
                 f"{', '.join(sorted(set(unclassified)))}. Check those account "
                 "types in MoneyWiz."
+            )
+
+        if loan_notes:
+            recommendations.append(
+                f"📌 {len(loan_notes)} loan payment notes: see "
+                "loan_payment_notes. Adding a MoneyWiz payment plan, or the "
+                "plan's principal category as a split, lets the payment be split "
+                "into principal and cost."
             )
 
         if ending_soon:

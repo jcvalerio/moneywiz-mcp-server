@@ -9,12 +9,14 @@ import pytest
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.scheduled_transaction import (
+    CategorySplit,
     RecurrenceEndCondition,
     RecurrencePattern,
     SalaryBreakdownResponse,
     ScheduledTransactionModel,
     TransactionType,
 )
+from moneywiz_mcp_server.services import scheduled_transaction_service
 from moneywiz_mcp_server.services.account_kinds import (
     AccountKind,
     TransferKind,
@@ -25,6 +27,12 @@ from moneywiz_mcp_server.services.exchange_rate_service import (
     ExchangeRates,
     ExchangeRateService,
     RateInfo,
+)
+from moneywiz_mcp_server.services.loan_plans import (
+    LoanPlan,
+    LoanPlans,
+    PlanItem,
+    load_loan_plans,
 )
 from moneywiz_mcp_server.services.scheduled_transaction_service import (
     ScheduledEntityRole,
@@ -102,7 +110,12 @@ ACCOUNT_KINDS = {
 
 @pytest.fixture
 def make_service(monkeypatch):
-    def _make(schedules, rates=USD_BASE):
+    def _make(schedules, rates=USD_BASE, plans=None):
+        monkeypatch.setattr(
+            scheduled_transaction_service,
+            "load_loan_plans",
+            AsyncMock(return_value=plans or LoanPlans()),
+        )
         service = ScheduledTransactionService(MagicMock(spec=DatabaseManager))
         service.get_scheduled_transactions = AsyncMock(return_value=schedules)
         service.get_account_kinds = AsyncMock(return_value=ACCOUNT_KINDS)
@@ -372,6 +385,162 @@ class TestTransfers:
         assert (
             service._infer_transaction_type(amount, ScheduledEntityRole.TRANSFER)
             == expected
+        )
+
+
+PRINCIPAL, INTEREST, INSURANCE, OTHER = 1, 2, 3, 4
+
+
+def loan_payment(splits=None, plan_id=10, **kwargs):
+    t = transfer("Mortgage", "-900", "USD", destination="mortgage", **kwargs)
+    if splits is None:
+        splits = [
+            CategorySplit(category="Principal", category_id=PRINCIPAL, amount=600),
+            CategorySplit(category="Interest", category_id=INTEREST, amount=270),
+            CategorySplit(category="Insurance", category_id=INSURANCE, amount=30),
+        ]
+    return t.model_copy(
+        update={
+            "category_splits": splits,
+            "payment_plan_id": plan_id,
+            "recipient_account_name": "Home loan",
+        }
+    )
+
+
+def plans(items=None, by_account=False):
+    plan = LoanPlan(PRINCIPAL, INTEREST, items or {})
+    if by_account:
+        return LoanPlans(by_loan_account={"mortgage": plan})
+    return LoanPlans(by_id={10: plan})
+
+
+class TestLoanPaymentSplit:
+    """#69: loan payments split into principal and cost with the payment plan."""
+
+    async def breakdown(self, make_service, schedule, plan_set, **kwargs):
+        return await breakdown(
+            make_service([schedule], plans=plan_set),
+            planning_horizon_months=1,
+            **kwargs,
+        )
+
+    async def test_splits_by_the_plans_principal_category(self, make_service):
+        result = await self.breakdown(make_service, loan_payment(), plans())
+        assert result["total_commitments_in_period"]["USD"] == Decimal("900")
+        by_kind = {k: v["USD"] for k, v in result["commitments_by_kind"].items()}
+        assert by_kind == {
+            "loan_principal": Decimal("600"),
+            "loan_cost": Decimal("300"),
+        }
+        [c] = result["infinite_commitments"]
+        assert (c.kind, c.principal_in_period, c.cost_in_period) == (
+            "loan_payment",
+            Decimal("600"),
+            Decimal("300"),
+        )
+        assert result["loan_payment_notes"] == []
+
+    async def test_principal_can_be_left_out(self, make_service):
+        result = await self.breakdown(
+            make_service, loan_payment(), plans(), count_loan_principal=False
+        )
+        assert result["total_commitments_in_period"]["USD"] == Decimal("300")
+        assert "loan_principal" not in result["commitments_by_kind"]
+        [c] = result["infinite_commitments"]
+        assert c.total_impact_in_period == Decimal("300")
+
+    async def test_interest_comes_from_the_plan_item(self, make_service):
+        items = {(2027, 1): PlanItem(principal=Decimal("605"), interest=Decimal("265"))}
+        result = await self.breakdown(make_service, loan_payment(), plans(items))
+        [c] = result["infinite_commitments"]
+        assert (c.principal_in_period, c.cost_in_period) == (
+            Decimal("605"),
+            Decimal("295"),  # 265 interest + 30 insurance
+        )
+        [note] = result["loan_payment_notes"]
+        assert "2027-01" in note
+        assert "-5.00 USD" in note
+
+    async def test_no_plan_and_no_splits_stays_a_debt_payment(self, make_service):
+        result = await self.breakdown(
+            make_service, loan_payment(splits=[], plan_id=None), LoanPlans()
+        )
+        assert result["commitments_by_kind"]["debt_payment"]["USD"] == Decimal("900")
+        [c] = result["infinite_commitments"]
+        assert (c.kind, c.principal_in_period) == ("debt_payment", None)
+        [note] = result["loan_payment_notes"]
+        assert note.startswith("Mortgage (Home loan): no MoneyWiz payment plan")
+        assert any("loan_payment_notes" in r for r in result["recommendations"])
+
+    async def test_splits_without_the_principal_category_count_as_cost(
+        self, make_service
+    ):
+        splits = [CategorySplit(category="Other", category_id=OTHER, amount=900)]
+        result = await self.breakdown(
+            make_service, loan_payment(splits=splits), plans()
+        )
+        by_kind = result["commitments_by_kind"]
+        assert by_kind["loan_cost"]["USD"] == Decimal("900")
+        assert "loan_principal" not in by_kind
+        assert "principal category" in result["loan_payment_notes"][0]
+
+    async def test_plan_found_through_the_loan_account(self, make_service):
+        result = await self.breakdown(
+            make_service, loan_payment(plan_id=None), plans(by_account=True)
+        )
+        [c] = result["infinite_commitments"]
+        assert c.principal_in_period == Decimal("600")
+
+    async def test_plan_item_splits_a_payment_without_category_splits(
+        self, make_service
+    ):
+        items = {(2027, 1): PlanItem(principal=Decimal("650"), interest=Decimal("250"))}
+        result = await self.breakdown(
+            make_service, loan_payment(splits=[]), plans(items)
+        )
+        [c] = result["infinite_commitments"]
+        assert (c.principal_in_period, c.cost_in_period) == (
+            Decimal("650"),
+            Decimal("250"),
+        )
+
+    async def test_plans_load_from_sqlite(self, tmp_path):
+        path = tmp_path / "moneywiz.sqlite"
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER, Z_NAME VARCHAR)")
+        conn.executemany(
+            "INSERT INTO Z_PRIMARYKEY VALUES (?, ?)",
+            [(60, "PaymentPlan"), (61, "PaymentPlanItem")],
+        )
+        conn.execute(
+            """CREATE TABLE ZSYNCOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER,
+               ZLOANACCOUNT INTEGER, ZCATEGORYPRINCIPAL INTEGER,
+               ZCATEGORYINTEREST INTEGER, ZPAYMENTPLAN1 INTEGER, ZDATE REAL,
+               ZPRINCIPALAMOUNT1 REAL, ZINTERESTAMOUNT REAL)"""
+        )
+        when = datetime_to_core_data_timestamp(datetime(2027, 1, 11, 12))
+        conn.executemany(
+            "INSERT INTO ZSYNCOBJECT VALUES (?,?,?,?,?,?,?,?,?)",
+            [
+                (10, 60, 500, 87, 91, None, None, None, None),
+                (11, 61, None, None, None, 10, when, 571.27, 272.86),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        db = DatabaseManager(str(path), read_only=True)
+        await db.initialize()
+        try:
+            loaded = await load_loan_plans(db)
+        finally:
+            await db.close()
+        plan = loaded.for_payment(None, "500")
+        assert plan is loaded.by_id[10]
+        assert (plan.principal_category, plan.interest_category) == (87, 91)
+        assert plan.item_for(datetime(2027, 1, 30)) == PlanItem(
+            Decimal("571.27"), Decimal("272.86")
         )
 
 
