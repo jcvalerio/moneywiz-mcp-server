@@ -6,8 +6,25 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+### Compatibility notes
+
+- **MCP tool schema changes:**
+  - `analyze_salary_breakdown` adds the optional arguments `salary_currency`, `salary_frequency`, `display_currency`, `exchange_rates` and `count_savings_as_commitments`.
+  - `analyze_salary_breakdown` adds the response fields `income_in_period`, `income_sources`, `commitments_by_kind`, `transfers_in_period`, `unclassified_transfers`, `display_currency`, `totals_in_display_currency`, `exchange_rates_used` and `currencies_without_rate`, plus `kind` on each commitment.
+  - `coverage_analysis` can now be `unknown` (no income found) or `incomplete` (a currency has no exchange rate).
+  - **Breaking:** in `get_commitments_ending_timeline`, `monthly_relief` and `total_monthly_relief` are now `{currency: amount}` maps instead of one float that mixed currencies. Relief is the amount of each payment, so it is no longer described as monthly.
+  - `get_scheduled_transactions` lists one-time schedules (`commitment_type: one_time`) and counts them in its summary.
+- **Behavior changes:**
+  - `salary_amount` without `salary_currency` returns an error when the currency can't be inferred from the schedules or the MoneyWiz base currency. It no longer assumes USD.
+  - When `salary_amount` is omitted, income comes from the scheduled deposits. The old placeholder salary of 5000 is gone.
+
 ### Fixed
 
+- `analyze_salary_breakdown` counts every paycheck in the period (a biweekly salary over 3 months is 7 payments, not 1) and income in every currency.
+- Amounts in different currencies are no longer compared or summed as if they were the same currency. They are kept per currency and combined using MoneyWiz's latest exchange rates.
+- Scheduled transfers are classified from the MoneyWiz types of their accounts. Loan payments and savings contributions count as commitments. Credit card payments, internal moves, and transfers out of a card or loan don't.
+- One-time scheduled transactions were never loaded. Schedules that end ("after N repeats" or "on date") were treated as endless. Both are now counted correctly.
+- The MoneyWiz base currency is detected from the currency with the most rate-1 transactions. Rates are read from deposits, withdrawals and refunds only, because transfers store the rate between their two accounts.
 - The MCP handshake now reports the server's own version. It previously reported the `mcp` SDK's version (for example `1.30.0`) because FastMCP 1.x has no version setting.
 
 ## 2.0.0 - 2026-11-02

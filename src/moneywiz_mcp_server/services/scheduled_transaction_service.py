@@ -1,6 +1,6 @@
 """Service for scheduled transaction operations and occurrence tracking."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 import logging
@@ -10,18 +10,30 @@ from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
 from moneywiz_mcp_server.models.scheduled_transaction import (
     CommitmentBreakdown,
+    DisplayCurrencyTotals,
+    ExchangeRateUsed,
+    IncomeSource,
     RecurrenceEndCondition,
     RecurrencePattern,
     ScheduledTransactionModel,
     WeekendHandling,
 )
 from moneywiz_mcp_server.models.transaction import TransactionType
+from moneywiz_mcp_server.services.account_kinds import (
+    ACCOUNT_KIND_BY_ENTITY,
+    AccountKind,
+    TransferKind,
+    classify_transfer,
+)
+from moneywiz_mcp_server.services.exchange_rate_service import ExchangeRateService
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
 )
 from moneywiz_mcp_server.utils.recurrence import (
     add_months,
     occurrence_dates,
+    occurrences_between,
+    parse_frequency,
     recurrence_from_duration,
 )
 
@@ -136,10 +148,10 @@ class ScheduledTransactionService:
             entity_roles = await self._get_scheduled_entity_roles()
 
             for entity_type in entity_roles:
-                # Query for active scheduled transactions
+                # Repeating and one-time (ZISREPEATABLE1 = 0) schedules
                 query = """
                     SELECT * FROM ZSYNCOBJECT
-                    WHERE Z_ENT = ? AND ZISREPEATABLE1 = 1
+                    WHERE Z_ENT = ?
                 """
                 params = [entity_type]
 
@@ -225,6 +237,12 @@ class ScheduledTransactionService:
 
             # Get account, category, payee, and tag info based on entity type
             account_id = str(record.get("ZACCOUNT1", ""))
+            recipient = record.get("ZRECIPIENTACCOUNT")
+            recipient_account_id = (
+                str(recipient)
+                if entity_role == ScheduledEntityRole.TRANSFER and recipient
+                else None
+            )
             category_info = await self._get_category_info_for_scheduled(record)
             tags = await self._get_tags_for_scheduled(record)
             payee: str | None
@@ -249,21 +267,23 @@ class ScheduledTransactionService:
                 record.get("ZDURATIONUNITS1"), record.get("ZDURATION1")
             )
 
-            # Calculate occurrence data from actual fields
             executes_count = record.get("ZEXECUTESCOUNT", 0)
-            total_occurrences = (
-                None  # MoneyWiz doesn't seem to use fixed total occurrences
+            if record.get("ZISREPEATABLE1") == 0 and (executes_count or 0) > 0:
+                return None  # a one-time schedule that has already run
+            (
+                is_one_time,
+                end_condition,
+                final_execution_date,
+                remaining_occurrences,
+            ) = self._end_of_schedule(
+                record, next_execution_date, recurrence_pattern, recurrence_interval
             )
-            remaining_occurrences = None
-
-            # Determine end condition - MoneyWiz scheduled transactions seem to run indefinitely
-            end_condition = RecurrenceEndCondition.NEVER
 
             # Generate upcoming dates
             upcoming_dates = await self._generate_upcoming_dates(
                 next_execution_date,
                 recurrence_pattern,
-                None,
+                remaining_occurrences,
                 6,
                 interval=recurrence_interval,
             )
@@ -280,6 +300,7 @@ class ScheduledTransactionService:
                 amount=Decimal(str(amount)),
                 currency=record.get("ZCURRENCYNAME3", "USD"),
                 account_id=account_id,
+                recipient_account_id=recipient_account_id,
                 category=category_info["category"] or "Uncategorized",
                 category_id=category_info["category_id"],
                 parent_category=category_info["parent_category"],
@@ -288,17 +309,18 @@ class ScheduledTransactionService:
                 category_path=category_info["category_path"],
                 category_hierarchy=category_info["category_hierarchy"],
                 payee=payee or "Unknown",
-                transaction_type=self._infer_transaction_type(amount),
+                transaction_type=self._infer_transaction_type(amount, entity_role),
                 tags=tags,
                 recurrence_pattern=recurrence_pattern,
                 recurrence_interval=recurrence_interval,
                 next_execution_date=next_execution_date,
                 weekend_handling=self._infer_weekend_handling(record),
                 end_condition=end_condition,
-                total_occurrences=total_occurrences,
+                total_occurrences=1 if is_one_time else None,
                 completed_occurrences=executes_count,
                 remaining_occurrences=remaining_occurrences,
-                final_execution_date=None,  # No fixed end date for most MoneyWiz schedules
+                final_execution_date=final_execution_date,
+                is_one_time=is_one_time,
                 upcoming_dates=upcoming_dates,
                 is_active=record.get("ZDISABLEEXECUTION", 0) == 0,
                 created_date=created_date,
@@ -315,6 +337,35 @@ class ScheduledTransactionService:
                 "it is omitted from results"
             )
             return None
+
+    @staticmethod
+    def _end_of_schedule(
+        record: dict[str, Any],
+        next_execution: datetime,
+        pattern: RecurrencePattern,
+        interval: int,
+    ) -> tuple[bool, RecurrenceEndCondition, datetime | None, int | None]:
+        """How a schedule ends: (one-time, end condition, final date, remaining).
+
+        ZISREPEATABLE1 = 0 marks a one-time schedule, which runs once on its
+        next execution date. A repeating schedule that ends ("after N
+        repeats" or "on date") stores its last date in ZLASTEXECUTEDATE.
+        """
+        if record.get("ZISREPEATABLE1") == 0:
+            return True, RecurrenceEndCondition.AFTER_OCCURRENCES, next_execution, 1
+        last = record.get("ZLASTEXECUTEDATE")
+        if last is None:
+            return False, RecurrenceEndCondition.NEVER, None, None
+        final = core_data_timestamp_to_datetime(last)
+        # Compare calendar days: the stored end may differ in time of day.
+        remaining = sum(
+            1
+            for d in occurrence_dates(
+                next_execution, pattern, interval, until=final + timedelta(days=1)
+            )
+            if d.date() <= final.date()
+        )
+        return False, RecurrenceEndCondition.ON_DATE, final, remaining
 
     async def _matches_filters(
         self,
@@ -459,8 +510,18 @@ class ScheduledTransactionService:
 
         return hierarchy
 
-    def _infer_transaction_type(self, amount: float) -> TransactionType:
-        """Infer transaction type from amount."""
+    def _infer_transaction_type(
+        self,
+        amount: float,
+        entity_role: ScheduledEntityRole = ScheduledEntityRole.REGULAR,
+    ) -> TransactionType:
+        """Infer transaction type from the entity role and amount sign."""
+        if entity_role == ScheduledEntityRole.TRANSFER:
+            return (
+                TransactionType.TRANSFER_OUT
+                if amount < 0
+                else TransactionType.TRANSFER_IN
+            )
         if amount > 0:
             return TransactionType.DEPOSIT  # Positive amount = money coming in
         else:
@@ -476,7 +537,7 @@ class ScheduledTransactionService:
     ) -> list[datetime]:
         """Generate upcoming execution dates within the next months_ahead months."""
         limit = 20  # Cap for performance
-        if remaining_occurrences:
+        if remaining_occurrences is not None:
             limit = min(limit, remaining_occurrences)
         return occurrence_dates(
             next_date,
@@ -624,175 +685,438 @@ class ScheduledTransactionService:
 
         return f"Payee_{payee_id}"
 
+    async def _get_account_kinds(self) -> dict[str, AccountKind]:
+        """Account Z_PK (as str) -> kind, from each account's entity type."""
+        entity_map = await self.db_manager.get_entity_name_map()
+        kind_by_ent = {
+            entity_map[name]: kind
+            for name, kind in ACCOUNT_KIND_BY_ENTITY.items()
+            if name in entity_map
+        }
+        if not kind_by_ent:
+            return {}
+        placeholders = ",".join("?" for _ in kind_by_ent)
+        rows = await self.db_manager.execute_query(
+            f"SELECT Z_PK, Z_ENT FROM ZSYNCOBJECT WHERE Z_ENT IN ({placeholders})",  # nosec B608 - placeholders only
+            tuple(kind_by_ent),
+        )
+        return {str(row["Z_PK"]): kind_by_ent[row["Z_ENT"]] for row in rows}
+
+    @staticmethod
+    def _transfer_kind(
+        transfer: ScheduledTransactionModel,
+        account_kinds: dict[str, AccountKind],
+    ) -> TransferKind:
+        """Kind of a scheduled transfer from its accounts' MoneyWiz types."""
+        source, destination = transfer.account_id, transfer.recipient_account_id
+        if transfer.transaction_type == TransactionType.TRANSFER_IN:
+            source, destination = destination, source
+        return classify_transfer(
+            account_kinds.get(source or ""), account_kinds.get(destination or "")
+        )
+
     async def calculate_salary_breakdown(
         self,
         next_salary_date: datetime,
         salary_amount: Decimal | None = None,
         planning_horizon_months: int = 3,
+        salary_currency: str | None = None,
+        salary_frequency: str | None = None,
+        display_currency: str | None = None,
+        exchange_rates: dict[str, float] | None = None,
+        count_savings_as_commitments: bool = True,
     ) -> dict[str, Any]:
         """
-        Calculate salary breakdown showing how salary covers upcoming commitments.
+        Compare income with outgoing commitments over a planning period.
 
-        Args:
-            next_salary_date: Date of next salary payment
-            salary_amount: Optional salary amount (estimated if not provided)
-            planning_horizon_months: How far ahead to analyze (default 3 months)
+        The period is [next_salary_date, next_salary_date + horizon months).
 
-        Returns:
-            Dictionary with salary breakdown analysis
+        Income is every scheduled deposit in the period, in its own currency
+        (a salary in one currency and other income in another both count).
+        If salary_amount is given, it replaces the scheduled income in
+        salary_currency only; its payments are counted from salary_frequency,
+        else from the scheduled deposit in that currency, else monthly.
+
+        Commitments are scheduled withdrawals plus the scheduled transfers
+        that are obligations, classified from MoneyWiz account types (see
+        services/account_kinds.py): bank -> Loan payments, and bank ->
+        Investment contributions unless count_savings_as_commitments is
+        False. Credit card payments, internal moves and transfers out of a
+        card or loan don't count (the card's expenses are already the
+        scheduled withdrawals charged to it); every transfer is still
+        reported by kind.
+
+        Amounts stay in their native currency; combined totals are also
+        given in display_currency using MoneyWiz's latest exchange rates,
+        overridable via exchange_rates (units per 1 display_currency).
+
+        Raises:
+            ValueError: invalid frequency, rate, or an undeterminable currency.
         """
-        try:
-            logger.info(f"💰 Calculating salary breakdown for {next_salary_date}")
+        logger.info("💰 Calculating salary breakdown")
 
-            # Get all scheduled transactions
-            scheduled_transactions = await self.get_scheduled_transactions()
+        scheduled_transactions = await self.get_scheduled_transactions()
+        period_start = next_salary_date
+        period_end = add_months(next_salary_date, planning_horizon_months)
 
-            # Calculate period end date
-            period_end = add_months(next_salary_date, planning_horizon_months)
+        def in_period(t: ScheduledTransactionModel) -> list[datetime]:
+            return occurrences_between(
+                t.next_execution_date,
+                t.recurrence_pattern,
+                t.recurrence_interval,
+                period_start,
+                period_end,
+                max_occurrences=t.remaining_occurrences,
+            )
 
-            # Categorize commitments by type
-            finite_commitments = []
-            infinite_commitments = []
-            ending_soon_commitments = []
+        deposits = [
+            t
+            for t in scheduled_transactions
+            if t.transaction_type == TransactionType.DEPOSIT
+        ]
+        withdrawals = [
+            t
+            for t in scheduled_transactions
+            if t.transaction_type == TransactionType.WITHDRAW
+        ]
+        transfers = [
+            t
+            for t in scheduled_transactions
+            if t.transaction_type
+            in (TransactionType.TRANSFER_OUT, TransactionType.TRANSFER_IN)
+        ]
 
-            total_commitments = Decimal("0")
-            commitments_by_currency: dict[str, Decimal] = {}
+        rates = await ExchangeRateService(self.db_manager).get_rates()
 
-            for transaction in scheduled_transactions:
-                # Only outgoing commitments count against salary coverage;
-                # scheduled deposits (e.g. salary itself) are income, not a
-                # commitment.
-                if transaction.transaction_type == TransactionType.DEPOSIT:
-                    continue
+        # --- Income -------------------------------------------------------
+        income_sources: list[IncomeSource] = []
+        salary_per_payment: dict[str, Decimal] = {}
 
-                # Count payments in the period
-                payments_in_period = 0
-                total_impact = Decimal("0")
-
-                for upcoming_date in transaction.upcoming_dates:
-                    if next_salary_date <= upcoming_date <= period_end:
-                        payments_in_period += 1
-                        total_impact += abs(transaction.amount)
-
-                if payments_in_period == 0:
-                    continue  # No payments in this period
-
-                # Create commitment breakdown
-                commitment = CommitmentBreakdown(
-                    description=transaction.description,
-                    amount=abs(transaction.amount),
-                    currency=transaction.currency,
-                    category=transaction.category,
-                    next_date=transaction.next_execution_date,
-                    remaining_payments=transaction.remaining_occurrences,
-                    final_payment_date=transaction.final_execution_date,
-                    payments_in_period=payments_in_period,
-                    total_impact_in_period=total_impact,
-                    commitment_type=transaction.commitment_type,
-                    urgency_level=transaction.urgency_level,
+        if salary_amount is not None:
+            salary_currency = (
+                salary_currency
+                or (
+                    max(deposits, key=lambda t: abs(t.amount)).currency
+                    if len({t.currency for t in deposits}) == 1
+                    else None
                 )
-
-                # Categorize by commitment type
-                if transaction.commitment_type == "ending_soon":
-                    ending_soon_commitments.append(commitment)
-                elif transaction.commitment_type == "finite":
-                    finite_commitments.append(commitment)
-                else:
-                    infinite_commitments.append(commitment)
-
-                # Add to totals
-                total_commitments += total_impact
-                currency = transaction.currency
-                if currency not in commitments_by_currency:
-                    commitments_by_currency[currency] = Decimal("0")
-                commitments_by_currency[currency] += total_impact
-
-            # Estimate salary if not provided
-            if salary_amount is None:
-                # Simple estimation based on historical income data
-                salary_amount = await self._estimate_salary_amount()
-
-            # Assume salary is in primary currency (USD for now)
-            primary_currency = "USD"
-            salary_by_currency = {primary_currency: salary_amount}
-
-            # Calculate remaining amounts
-            remaining_by_currency = {}
-            for currency, commitment_total in commitments_by_currency.items():
-                salary_in_currency = salary_by_currency.get(currency, Decimal("0"))
-                remaining_by_currency[currency] = salary_in_currency - commitment_total
-
-            # Determine coverage analysis
-            primary_remaining = remaining_by_currency.get(
-                primary_currency, Decimal("0")
+                or rates.anchor
+                # Last resort: every schedule uses the same currency.
+                or (
+                    scheduled_transactions[0].currency
+                    if len({t.currency for t in scheduled_transactions}) == 1
+                    else None
+                )
             )
-            if primary_remaining > 0:
-                coverage_analysis = "sufficient"
-            elif primary_remaining > -salary_amount * Decimal("0.1"):  # Within 10%
-                coverage_analysis = "tight"
+            if not salary_currency:
+                raise ValueError(
+                    "salary_currency is required: it cannot be inferred from "
+                    "this database"
+                )
+            salary_currency = salary_currency.upper()
+
+            same_currency = [t for t in deposits if t.currency == salary_currency]
+            if salary_frequency:
+                pattern, interval = parse_frequency(salary_frequency)
+            elif same_currency:
+                main = max(same_currency, key=lambda t: abs(t.amount))
+                pattern, interval = main.recurrence_pattern, main.recurrence_interval
             else:
-                coverage_analysis = "insufficient"
+                pattern, interval = RecurrencePattern.MONTHLY, 1
 
-            # Generate recommendations
-            recommendations = self._generate_salary_recommendations(
-                coverage_analysis, ending_soon_commitments, finite_commitments
+            paychecks = occurrences_between(
+                next_salary_date, pattern, interval, period_start, period_end
+            )
+            income_sources.append(
+                IncomeSource(
+                    description="Salary (provided)",
+                    currency=salary_currency,
+                    amount_per_payment=salary_amount,
+                    payments_in_period=len(paychecks),
+                    total_in_period=salary_amount * len(paychecks),
+                    recurrence_pattern=pattern.value,
+                    recurrence_interval=interval,
+                    source="provided",
+                )
+            )
+            salary_per_payment[salary_currency] = salary_amount
+            # The provided salary replaces scheduled income in its currency.
+            replaced = [
+                t.description
+                for t in deposits
+                if t.currency == salary_currency and in_period(t)
+            ]
+            deposits = [t for t in deposits if t.currency != salary_currency]
+        else:
+            replaced = []
+            if salary_frequency:
+                parse_frequency(salary_frequency)  # validate even if unused
+
+        for t in deposits:
+            dates = in_period(t)
+            if not dates:
+                continue
+            amount = abs(t.amount)
+            income_sources.append(
+                IncomeSource(
+                    description=t.description,
+                    currency=t.currency,
+                    amount_per_payment=amount,
+                    payments_in_period=len(dates),
+                    total_in_period=amount * len(dates),
+                    recurrence_pattern=t.recurrence_pattern.value,
+                    recurrence_interval=t.recurrence_interval,
+                    source="scheduled",
+                )
+            )
+            if salary_amount is None:
+                current = salary_per_payment.get(t.currency, Decimal("0"))
+                salary_per_payment[t.currency] = max(current, amount)
+
+        income_by_currency: dict[str, Decimal] = {}
+        for source in income_sources:
+            income_by_currency[source.currency] = (
+                income_by_currency.get(source.currency, Decimal("0"))
+                + source.total_in_period
             )
 
-            # Create commitment end analysis
-            commitment_end_analysis = self._analyze_commitment_endings(
-                finite_commitments + ending_soon_commitments
+        # --- Commitments --------------------------------------------------
+        finite_commitments: list[CommitmentBreakdown] = []
+        infinite_commitments: list[CommitmentBreakdown] = []
+        ending_soon_commitments: list[CommitmentBreakdown] = []
+        commitments_by_currency: dict[str, Decimal] = {}
+
+        account_kinds = await self._get_account_kinds() if transfers else {}
+        transfers_by_kind: dict[str, dict[str, Decimal]] = {}
+        unclassified: list[str] = []
+        counted: list[tuple[ScheduledTransactionModel, str, list[datetime]]] = [
+            (t, "expense", in_period(t)) for t in withdrawals
+        ]
+        for t in transfers:
+            dates = in_period(t)
+            if not dates:
+                continue
+            kind = self._transfer_kind(t, account_kinds)
+            bucket = transfers_by_kind.setdefault(kind.value, {})
+            bucket[t.currency] = bucket.get(t.currency, Decimal("0")) + abs(
+                t.amount
+            ) * len(dates)
+            if kind is TransferKind.UNCLASSIFIED:
+                unclassified.append(t.description)
+            elif kind is TransferKind.DEBT_PAYMENT or (
+                kind is TransferKind.SAVINGS and count_savings_as_commitments
+            ):
+                counted.append((t, kind.value, dates))
+
+        commitments_by_kind: dict[str, dict[str, Decimal]] = {}
+        for t, commitment_kind, dates in counted:
+            if not dates:
+                continue
+            amount = abs(t.amount)
+            total_impact = amount * len(dates)
+            commitment = CommitmentBreakdown(
+                description=t.description,
+                amount=amount,
+                currency=t.currency,
+                category=t.category,
+                next_date=t.next_execution_date,
+                remaining_payments=t.remaining_occurrences,
+                final_payment_date=t.final_execution_date,
+                payments_in_period=len(dates),
+                total_impact_in_period=total_impact,
+                commitment_type=t.commitment_type,
+                urgency_level=t.urgency_level,
+                kind=commitment_kind,
+            )
+            by_kind = commitments_by_kind.setdefault(commitment_kind, {})
+            by_kind[t.currency] = by_kind.get(t.currency, Decimal("0")) + total_impact
+            if t.commitment_type == "ending_soon":
+                ending_soon_commitments.append(commitment)
+            elif t.commitment_type in ("finite", "one_time"):
+                finite_commitments.append(commitment)
+            else:
+                infinite_commitments.append(commitment)
+            commitments_by_currency[t.currency] = (
+                commitments_by_currency.get(t.currency, Decimal("0")) + total_impact
             )
 
-            return {
-                "salary_amount": CurrencyAmounts(salary_by_currency),
-                "period_start": next_salary_date.isoformat(),
-                "period_end": period_end.isoformat(),
-                "next_salary_date": next_salary_date.isoformat(),
-                "total_commitments_in_period": CurrencyAmounts(commitments_by_currency),
-                "finite_commitments": finite_commitments,
-                "infinite_commitments": infinite_commitments,
-                "ending_soon_commitments": ending_soon_commitments,
-                "remaining_after_commitments": CurrencyAmounts(remaining_by_currency),
-                "coverage_analysis": coverage_analysis,
-                "commitment_end_analysis": commitment_end_analysis,
-                "recommendations": recommendations,
-                "currencies_found": list(commitments_by_currency.keys()),
-                "primary_currency": primary_currency,
-            }
+        currencies = sorted(set(income_by_currency) | set(commitments_by_currency))
+        remaining_by_currency = {
+            c: income_by_currency.get(c, Decimal("0"))
+            - commitments_by_currency.get(c, Decimal("0"))
+            for c in currencies
+        }
 
-        except Exception as e:
-            logger.error(f"❌ Failed to calculate salary breakdown: {e}")
-            raise
+        # --- Combined totals in one currency ------------------------------
+        display = (
+            (display_currency or "").upper()
+            or (
+                salary_currency.upper()
+                if salary_amount is not None and salary_currency
+                else None
+            )
+            or rates.anchor
+        )
+        if display is None and len(currencies) == 1:
+            display = currencies[0]
 
-    async def _estimate_salary_amount(self) -> Decimal:
-        """Estimate salary amount based on historical income data."""
-        # This would analyze historical income transactions
-        # For now, return a placeholder
-        return Decimal("5000.00")
+        totals = None
+        rates_used: list[ExchangeRateUsed] = []
+        without_rate: list[str] = []
+        if display:
+            display_rates = rates.rebase(display).with_overrides(exchange_rates)
+            income_total = commitments_total = Decimal("0")
+            for c in currencies:
+                if c != display and not display_rates.has(c):
+                    without_rate.append(c)
+                    continue
+                income_total += display_rates.convert(
+                    income_by_currency.get(c, Decimal("0")), c
+                ) or Decimal("0")
+                commitments_total += display_rates.convert(
+                    commitments_by_currency.get(c, Decimal("0")), c
+                ) or Decimal("0")
+                if c != display:
+                    info = display_rates.rates[c]
+                    rates_used.append(
+                        ExchangeRateUsed(
+                            currency=c,
+                            units_per_display_currency=float(info.units_per_anchor),
+                            as_of=info.as_of,
+                            source=info.source,
+                        )
+                    )
+            totals = DisplayCurrencyTotals(
+                currency=display,
+                income=round(float(income_total), 2),
+                commitments=round(float(commitments_total), 2),
+                remaining=round(float(income_total - commitments_total), 2),
+            )
+            coverage_analysis = (
+                "incomplete"
+                if without_rate
+                else self._coverage(income_total, commitments_total)
+            )
+        else:
+            coverage_analysis = "unknown"
+
+        recommendations = self._generate_salary_recommendations(
+            coverage_analysis,
+            ending_soon_commitments,
+            finite_commitments,
+            has_income=bool(income_sources),
+            without_rate=without_rate,
+            unclassified=unclassified,
+            replaced_income=replaced,
+        )
+        commitment_end_analysis = self._analyze_commitment_endings(
+            finite_commitments + ending_soon_commitments
+        )
+
+        return {
+            "salary_amount": CurrencyAmounts(salary_per_payment),
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "next_salary_date": next_salary_date.isoformat(),
+            "total_commitments_in_period": CurrencyAmounts(commitments_by_currency),
+            "finite_commitments": finite_commitments,
+            "infinite_commitments": infinite_commitments,
+            "ending_soon_commitments": ending_soon_commitments,
+            "remaining_after_commitments": CurrencyAmounts(remaining_by_currency),
+            "coverage_analysis": coverage_analysis,
+            "commitment_end_analysis": commitment_end_analysis,
+            "recommendations": recommendations,
+            "income_in_period": CurrencyAmounts(income_by_currency),
+            "income_sources": income_sources,
+            "commitments_by_kind": {
+                k: CurrencyAmounts(v) for k, v in commitments_by_kind.items()
+            },
+            "transfers_in_period": {
+                k: CurrencyAmounts(v) for k, v in transfers_by_kind.items()
+            },
+            "unclassified_transfers": unclassified,
+            "display_currency": display,
+            "totals_in_display_currency": totals,
+            "exchange_rates_used": rates_used,
+            "currencies_without_rate": without_rate,
+        }
+
+    @staticmethod
+    def _coverage(income: Decimal, commitments: Decimal) -> str:
+        """sufficient: >= 10% of income left; tight: 0-10% left;
+        insufficient: commitments exceed income; unknown: no income."""
+        if income <= 0:
+            return "unknown"
+        remaining = income - commitments
+        if remaining < 0:
+            return "insufficient"
+        if remaining < income * Decimal("0.1"):
+            return "tight"
+        return "sufficient"
+
+    @staticmethod
+    def _format_by_currency(amounts: dict[str, Decimal]) -> str:
+        return " + ".join(
+            f"{amount:,.2f} {code}" for code, amount in sorted(amounts.items())
+        )
 
     def _generate_salary_recommendations(
         self,
         coverage_analysis: str,
         ending_soon: list[CommitmentBreakdown],
         finite: list[CommitmentBreakdown],
+        has_income: bool = True,
+        without_rate: list[str] | None = None,
+        unclassified: list[str] | None = None,
+        replaced_income: list[str] | None = None,
     ) -> list[str]:
-        """Generate personalized salary recommendations."""
+        """Generate salary recommendations; amounts are kept per currency."""
         recommendations = []
 
+        if not has_income:
+            recommendations.append(
+                "📌 No income found in this period. Pass salary_amount (and "
+                "salary_currency) or schedule your income in MoneyWiz."
+            )
         if coverage_analysis == "insufficient":
             recommendations.append(
-                "⚠️ Your commitments exceed your salary. Consider reducing expenses or increasing income."
+                "⚠️ Your commitments exceed your income for this period. "
+                "Consider reducing expenses or increasing income."
             )
-
         if coverage_analysis == "tight":
             recommendations.append(
-                "💡 Your budget is tight. Monitor expenses carefully this period."
+                "💡 Less than 10% of your income is left after commitments. "
+                "Monitor expenses carefully this period."
+            )
+        if without_rate:
+            recommendations.append(
+                f"📌 No exchange rate for {', '.join(without_rate)}; those "
+                "amounts are excluded from the combined totals, so there is "
+                "no coverage verdict (incomplete). Pass exchange_rates to "
+                "include them."
+            )
+        if replaced_income:
+            recommendations.append(
+                "📌 The provided salary replaces the scheduled income in its "
+                f"currency: {', '.join(sorted(set(replaced_income)))}. Leave "
+                "salary_amount out to count every scheduled deposit."
+            )
+
+        if unclassified:
+            recommendations.append(
+                f"📌 {len(unclassified)} scheduled transfers connect account "
+                "types that fit no rule and are left out of commitments: "
+                f"{', '.join(sorted(set(unclassified)))}. Check those account "
+                "types in MoneyWiz."
             )
 
         if ending_soon:
-            total_relief = sum(c.amount for c in ending_soon)
+            relief: dict[str, Decimal] = {}
+            for c in ending_soon:
+                relief[c.currency] = relief.get(c.currency, Decimal("0")) + c.amount
             recommendations.append(
-                f"🎉 {len(ending_soon)} commitments ending soon will free up ${total_relief}/month."
+                f"🎉 {len(ending_soon)} commitments ending soon will free up "
+                f"{self._format_by_currency(relief)} per payment."
             )
 
         if finite:

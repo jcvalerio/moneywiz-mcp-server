@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import Enum, StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from .base import ApiDateTime, BaseCurrencyResponse
 from .currency_types import CurrencyAmounts
@@ -46,6 +46,9 @@ class ScheduledTransactionModel(BaseModel):
     amount: Decimal = Field(..., description="Transaction amount")
     currency: str = Field(..., description="Transaction currency")
     account_id: str = Field(..., description="Associated account ID")
+    recipient_account_id: str | None = Field(
+        None, description="Destination account ID (transfers only)"
+    )
     category: str = Field(..., description="Transaction leaf category")
     category_id: int | None = Field(None, description="Transaction category ID")
     parent_category: str | None = Field(None, description="Immediate parent category")
@@ -91,6 +94,9 @@ class ScheduledTransactionModel(BaseModel):
     final_execution_date: datetime | None = Field(
         None, description="Date of final planned execution"
     )
+    is_one_time: bool = Field(
+        default=False, description="Runs once, on next_execution_date"
+    )
 
     # Planning Information
     upcoming_dates: list[datetime] = Field(
@@ -121,6 +127,8 @@ class ScheduledTransactionModel(BaseModel):
     @property
     def commitment_type(self) -> str:
         """Classify commitment type based on occurrence pattern."""
+        if self.is_one_time:
+            return "one_time"
         if self.end_condition == RecurrenceEndCondition.NEVER:
             return "infinite"
         elif self.remaining_occurrences and self.remaining_occurrences <= 3:
@@ -172,8 +180,56 @@ class CommitmentBreakdown(BaseModel):
     )
 
     # Status indicators
-    commitment_type: str = Field(..., description="Type: finite, infinite, ending_soon")
+    commitment_type: str = Field(
+        ..., description="Type: finite, infinite, ending_soon, one_time"
+    )
     urgency_level: str = Field(..., description="Urgency: immediate, regular, ending")
+    kind: str = Field(
+        "expense",
+        description="expense (scheduled withdrawal), debt_payment (bank -> Loan "
+        "account) or savings (bank -> Investment account)",
+    )
+
+
+class IncomeSource(BaseModel):
+    """One income stream counted in a salary breakdown, in its own currency."""
+
+    description: str = Field(..., description="Income description")
+    currency: str = Field(..., description="Currency code")
+    amount_per_payment: Decimal = Field(..., description="Amount of each payment")
+    payments_in_period: int = Field(..., description="Payments inside the period")
+    total_in_period: Decimal = Field(..., description="Total received in the period")
+    recurrence_pattern: str = Field(..., description="daily/weekly/monthly/yearly")
+    recurrence_interval: int = Field(..., description="Every N pattern units")
+    source: str = Field(
+        ..., description="'scheduled' (MoneyWiz schedule) or 'provided' (tool input)"
+    )
+
+    @field_serializer("amount_per_payment", "total_in_period")
+    def _serialize_decimal(self, value: Decimal) -> float:
+        return float(value)
+
+
+class ExchangeRateUsed(BaseModel):
+    """Rate used to express an amount in the display currency."""
+
+    currency: str = Field(..., description="Currency code")
+    units_per_display_currency: float = Field(
+        ..., description="Units of this currency per 1 unit of the display currency"
+    )
+    as_of: ApiDateTime | None = Field(
+        None, description="Date of the MoneyWiz transaction the rate comes from"
+    )
+    source: str = Field(..., description="'moneywiz' or 'provided'")
+
+
+class DisplayCurrencyTotals(BaseModel):
+    """Period totals converted into one currency."""
+
+    currency: str = Field(..., description="Display currency")
+    income: float = Field(..., description="Income in the period")
+    commitments: float = Field(..., description="Commitments in the period")
+    remaining: float = Field(..., description="Income minus commitments")
 
 
 class ScheduledTransactionResponse(BaseModel):
@@ -220,7 +276,9 @@ class ScheduledTransactionResponse(BaseModel):
     )
 
     is_active: bool = Field(..., description="Whether schedule is active")
-    commitment_type: str = Field(..., description="finite/infinite/ending_soon")
+    commitment_type: str = Field(
+        ..., description="finite/infinite/ending_soon/one_time"
+    )
     urgency_level: str = Field(..., description="immediate/regular/future")
 
 
@@ -242,7 +300,9 @@ class ScheduledTransactionListResponse(BaseModel):
 class SalaryBreakdownResponse(BaseCurrencyResponse):
     """Response model for salary breakdown analysis with occurrence intelligence."""
 
-    salary_amount: CurrencyAmounts = Field(..., description="Salary amount by currency")
+    salary_amount: CurrencyAmounts = Field(
+        ..., description="Amount per salary payment by currency, when known"
+    )
     period_start: str = Field(..., description="Analysis period start date (ISO)")
     period_end: str = Field(..., description="Analysis period end date (ISO)")
     next_salary_date: str = Field(..., description="Next salary date (ISO)")
@@ -266,13 +326,54 @@ class SalaryBreakdownResponse(BaseCurrencyResponse):
         ..., description="Amount remaining after commitments by currency"
     )
     coverage_analysis: str = Field(
-        ..., description="sufficient/tight/insufficient coverage analysis"
+        ...,
+        description="sufficient/tight/insufficient; unknown when no income "
+        "was found; incomplete when a currency has no exchange rate",
     )
     commitment_end_analysis: str = Field(
         ..., description="Analysis of when commitments will end"
     )
     recommendations: list[str] = Field(
         default_factory=list, description="Financial planning recommendations"
+    )
+
+    # Multi-currency income and conversion
+    income_in_period: CurrencyAmounts = Field(
+        default_factory=CurrencyAmounts,
+        description="All income received in the period, by native currency",
+    )
+    income_sources: list[IncomeSource] = Field(
+        default_factory=list, description="Income streams counted in the period"
+    )
+    commitments_by_kind: dict[str, CurrencyAmounts] = Field(
+        default_factory=dict,
+        description="Commitments in the period split into expense, debt_payment "
+        "and savings, by currency",
+    )
+    transfers_in_period: dict[str, CurrencyAmounts] = Field(
+        default_factory=dict,
+        description="Every scheduled transfer in the period by kind, classified "
+        "from the MoneyWiz account types: debt_payment and savings count as "
+        "commitments; card_payment (pays expenses already recorded on the card), "
+        "internal, non_cash and unclassified do not",
+    )
+    unclassified_transfers: list[str] = Field(
+        default_factory=list,
+        description="Transfers whose account types fit no rule; check those "
+        "account types in MoneyWiz",
+    )
+    display_currency: str | None = Field(
+        None, description="Currency the combined totals are expressed in"
+    )
+    totals_in_display_currency: DisplayCurrencyTotals | None = Field(
+        None, description="Income, commitments and remaining converted to one currency"
+    )
+    exchange_rates_used: list[ExchangeRateUsed] = Field(
+        default_factory=list, description="Rates used for the combined totals"
+    )
+    currencies_without_rate: list[str] = Field(
+        default_factory=list,
+        description="Currencies left out of the combined totals for lack of a rate",
     )
 
 

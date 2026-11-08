@@ -142,3 +142,54 @@ def occurrence_dates(
         dates.append(current)
         k += 1
     return dates
+
+
+FREQUENCIES: dict[str, tuple[RecurrencePattern, int]] = {
+    "daily": (RecurrencePattern.DAILY, 1),
+    "weekly": (RecurrencePattern.WEEKLY, 1),
+    "biweekly": (RecurrencePattern.WEEKLY, 2),
+    "monthly": (RecurrencePattern.MONTHLY, 1),
+    "bimonthly": (RecurrencePattern.MONTHLY, 2),
+    "quarterly": (RecurrencePattern.MONTHLY, 3),
+    "semiannual": (RecurrencePattern.MONTHLY, 6),
+    "yearly": (RecurrencePattern.YEARLY, 1),
+}
+
+
+def parse_frequency(name: str) -> tuple[RecurrencePattern, int]:
+    """Map a frequency name ("biweekly", "monthly", ...) to (pattern, interval)."""
+    key = name.strip().lower().replace("-", "").replace(" ", "")
+    key = {"fortnightly": "biweekly", "annual": "yearly", "annually": "yearly"}.get(
+        key, key
+    )
+    if key not in FREQUENCIES:
+        raise ValueError(
+            f"Unknown frequency {name!r}. Use one of: {', '.join(FREQUENCIES)}"
+        )
+    return FREQUENCIES[key]
+
+
+def occurrences_between(
+    anchor: datetime,
+    pattern: RecurrencePattern,
+    interval: int,
+    start: datetime,
+    end: datetime,
+    *,
+    max_occurrences: int | None = None,
+) -> list[datetime]:
+    """Occurrences of a schedule in the half-open window [start, end).
+
+    max_occurrences caps the schedule's total occurrences counted from the
+    anchor (for schedules that end), before the window is applied.
+    """
+    if end <= start:
+        return []
+    dates = occurrence_dates(
+        anchor,
+        pattern,
+        interval,
+        until=end,
+        limit=10_000 if max_occurrences is None else max_occurrences,
+    )
+    return [d for d in dates if start <= d < end]

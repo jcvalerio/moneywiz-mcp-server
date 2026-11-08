@@ -151,7 +151,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 # Service queries entities 32, 33, 34
                 if entity_type == 32:
@@ -233,7 +233,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -262,6 +262,7 @@ class TestScheduledTransactionsIntegration:
             next_salary_date=next_salary_date,
             salary_amount=salary_amount,
             planning_horizon_months=3,
+            salary_currency="USD",
         )
 
         # Verify the response structure
@@ -316,7 +317,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -387,7 +388,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -493,7 +494,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query and params[0] == 34:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query and params[0] == 34:
                 return [test_record]
             elif params and params[0] == 19:  # Category lookup
                 category_id = params[-1]
@@ -587,6 +588,7 @@ class TestScheduledTransactionsErrorScenarios:
             next_salary_date=next_salary_date,
             salary_amount=5000.0,
             planning_horizon_months=-1,  # Negative value
+            salary_currency="USD",
         )
 
         # Verify we still get a valid response structure

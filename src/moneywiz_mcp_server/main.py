@@ -39,6 +39,7 @@ from .models.scheduled_transaction import (
     ScheduledTransactionListResponse,
     ScheduledTransactionResponse,
 )
+from .models.transaction import TransactionType
 from .services.budget_service import BudgetService
 from .services.savings_service import SavingsService
 from .services.scheduled_transaction_service import ScheduledTransactionService
@@ -689,7 +690,8 @@ async def get_scheduled_transactions(
         time_period: Time period to analyze (e.g., 'next 6 months', 'next year')
         account_ids: Optional list of account IDs to filter by
         categories: Optional list of category names to filter by
-        commitment_types: Filter by commitment type: finite, infinite, ending_soon
+        commitment_types: Filter by commitment type: finite, infinite,
+            ending_soon, one_time
         include_inactive: Include inactive scheduled transactions
         limit: Maximum number of transactions to return (1-100)
 
@@ -764,6 +766,9 @@ async def get_scheduled_transactions(
                 "finite_commitments": finite_count,
                 "infinite_commitments": infinite_count,
                 "ending_soon_commitments": ending_soon_count,
+                "one_time": sum(
+                    1 for t in scheduled_transactions if t.commitment_type == "one_time"
+                ),
                 "total_active": sum(1 for t in scheduled_transactions if t.is_active),
             }
 
@@ -794,44 +799,69 @@ async def analyze_salary_breakdown(
     next_salary_date: str,
     salary_amount: float | None = None,
     planning_horizon_months: int = 3,
+    salary_currency: str | None = None,
+    salary_frequency: str | None = None,
+    display_currency: str | None = None,
+    exchange_rates: dict[str, float] | None = None,
+    count_savings_as_commitments: bool = True,
 ) -> SalaryBreakdownResponse:
     """
-    Analyze how next salary covers upcoming scheduled commitments with occurrence tracking.
+    Analyze whether income covers scheduled commitments over a planning period.
+
+    Income is detected from scheduled deposits in every currency (e.g. a USD
+    salary plus CRC income). Amounts are reported in their own currency and
+    also combined in one display currency using MoneyWiz's latest exchange
+    rates. Commitments are scheduled withdrawals plus scheduled transfers
+    that are obligations, classified from the MoneyWiz account types: bank ->
+    Loan (debt payments) and bank -> Investment (savings). Credit card
+    payments are not counted (the expenses charged to the card are), nor
+    are internal moves or transfers out of a card or loan. Every transfer is
+    reported by kind; ones whose account types fit no rule are listed.
 
     Args:
-        next_salary_date: Date of next salary payment (YYYY-MM-DD)
-        salary_amount: Optional salary amount (estimated if not provided)
-        planning_horizon_months: How far ahead to analyze (1-12 months)
+        next_salary_date: Start of the period, usually the next payday (YYYY-MM-DD)
+        salary_amount: Amount of ONE salary payment. Replaces the scheduled
+            income in salary_currency; omit to use the scheduled income
+        planning_horizon_months: Length of the period in months (1-12)
+        salary_currency: Currency of salary_amount (e.g. USD). Defaults to the
+            scheduled salary's currency, else the MoneyWiz base currency
+        salary_frequency: How often salary_amount is paid: weekly, biweekly,
+            monthly, quarterly, yearly. Defaults to the scheduled salary's
+            recurrence, else monthly
+        display_currency: Currency for the combined totals (e.g. USD or CRC).
+            Defaults to salary_currency, else the MoneyWiz base currency
+        exchange_rates: Optional rate overrides as units of each currency per
+            1 display_currency, e.g. {"CRC": 505} with display_currency USD
+        count_savings_as_commitments: Count bank -> Investment transfers
+            (e.g. retirement contributions) as commitments (default true)
 
     Returns:
-        Detailed breakdown showing how salary covers commitments with occurrence details
+        Income and commitments per currency, combined totals with the
+        exchange rates used, and a coverage verdict
     """
-    logger.info(f"💰 Analyzing salary breakdown for {next_salary_date}")
+    logger.info("💰 Analyzing salary breakdown")
 
     try:
-        # Get database manager
         db_manager = await get_db_manager()
 
         try:
             from datetime import datetime
             from decimal import Decimal
 
-            # Parse salary date
             salary_date = datetime.fromisoformat(next_salary_date)
-
-            # Initialize scheduled transaction service
             scheduled_service = ScheduledTransactionService(db_manager)
 
-            # Convert salary amount to Decimal if provided
-            salary_decimal = None
-            if salary_amount is not None:
-                salary_decimal = Decimal(str(salary_amount))
-
-            # Calculate salary breakdown
             breakdown_data = await scheduled_service.calculate_salary_breakdown(
                 next_salary_date=salary_date,
-                salary_amount=salary_decimal,
+                salary_amount=(
+                    Decimal(str(salary_amount)) if salary_amount is not None else None
+                ),
                 planning_horizon_months=planning_horizon_months,
+                salary_currency=salary_currency,
+                salary_frequency=salary_frequency,
+                display_currency=display_currency,
+                exchange_rates=exchange_rates,
+                count_savings_as_commitments=count_savings_as_commitments,
             )
 
             return SalaryBreakdownResponse(**breakdown_data)
@@ -877,84 +907,80 @@ async def get_commitments_ending_timeline(
                 await scheduled_service.get_scheduled_transactions()
             )
 
-            # Filter for finite commitments
+            # Finite outgoing commitments only. Scheduled transfers between own
+            # accounts are allocations, not expenses, and deposits are income.
             finite_commitments = [
                 t
                 for t in scheduled_transactions
                 if t.commitment_type in ["finite", "ending_soon"]
                 and t.final_execution_date
+                and t.transaction_type == TransactionType.WITHDRAW
             ]
-
-            # Group by ending month
-            ending_by_month: dict[str, list[dict[str, Any]]] = defaultdict(list)
-            cash_flow_changes: dict[str, dict[str, float | int]] = defaultdict(
-                lambda: {"amount": 0.0, "count": 0}
-            )
 
             end_date = add_months(datetime.now(), months_ahead)
 
-            for commitment in finite_commitments:
-                if (
-                    commitment.final_execution_date
-                    and commitment.final_execution_date <= end_date
-                ):
-                    ending_month = commitment.final_execution_date.strftime("%Y-%m")
-                    ending_by_month[ending_month].append(
-                        {
-                            "description": commitment.description,
-                            "amount": float(commitment.amount),
-                            "currency": commitment.currency,
-                            "final_date": commitment.final_execution_date.isoformat(),
-                            "remaining_payments": commitment.remaining_occurrences,
-                        }
-                    )
-
-                    # Add to cash flow changes
-                    cash_flow_changes[ending_month]["amount"] += float(
-                        commitment.amount
-                    )
-                    cash_flow_changes[ending_month]["count"] += 1
-
-            # Convert to response format
-            ending_commitments = []
-            for month, commitments in ending_by_month.items():
-                ending_commitments.append(
-                    {
-                        "month": month,
-                        "commitments": commitments,
-                        "total_monthly_relief": sum(c["amount"] for c in commitments),
-                        "commitment_count": len(commitments),
-                    }
-                )
-
-            cash_flow_list = []
-            for month, changes in cash_flow_changes.items():
-                cash_flow_list.append(
-                    {
-                        "month": month,
-                        "monthly_relief": changes["amount"],
-                        "commitments_ending": changes["count"],
-                    }
-                )
-
-            # Calculate total monthly relief
-            total_relief = sum(
-                changes["amount"] for changes in cash_flow_changes.values()
+            # Group by ending month, keeping amounts per currency
+            ending_by_month: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            relief_by_month: dict[str, dict[str, float]] = defaultdict(
+                lambda: defaultdict(float)
             )
-            total_relief_by_currency = {"USD": total_relief}  # Simplified for now
+            total_relief: dict[str, float] = defaultdict(float)
 
-            # Generate recommendations
-            recommendations = []
-            if total_relief > 0:
-                recommendations.append(
-                    f"💰 You'll free up ${total_relief:.2f}/month as {len(finite_commitments)} commitments end"
+            for commitment in finite_commitments:
+                final_date = commitment.final_execution_date
+                if final_date is None or final_date > end_date:
+                    continue
+                month = final_date.strftime("%Y-%m")
+                amount = abs(float(commitment.amount))
+                ending_by_month[month].append(
+                    {
+                        "description": commitment.description,
+                        "amount": amount,
+                        "currency": commitment.currency,
+                        "final_date": final_date.isoformat(),
+                        "remaining_payments": commitment.remaining_occurrences,
+                    }
                 )
-            if len(ending_by_month) > 0:
+                relief_by_month[month][commitment.currency] += amount
+                total_relief[commitment.currency] += amount
+
+            ending_commitments = [
+                {
+                    "month": month,
+                    "commitments": commitments,
+                    "total_monthly_relief": dict(relief_by_month[month]),
+                    "commitment_count": len(commitments),
+                }
+                for month, commitments in sorted(ending_by_month.items())
+            ]
+            cash_flow_list = [
+                {
+                    "month": month,
+                    "monthly_relief": dict(relief_by_month[month]),
+                    "commitments_ending": len(ending_by_month[month]),
+                }
+                for month in sorted(ending_by_month)
+            ]
+
+            recommendations = []
+            if total_relief:
+                relief_text = " + ".join(
+                    f"{amount:,.2f} {code}"
+                    for code, amount in sorted(total_relief.items())
+                )
+                count = sum(len(c) for c in ending_by_month.values())
+                recommendations.append(
+                    f"💰 You'll free up {relief_text} per payment as {count} "
+                    "commitments end"
+                )
+            if ending_by_month:
                 recommendations.append(
                     f"📅 Commitments ending across {len(ending_by_month)} different months"
                 )
 
             from .models.currency_types import CurrencyAmounts
+
+            total_relief_by_currency = dict(total_relief)
 
             return CommitmentTimelineResponse(
                 timeline_period=f"next {months_ahead} months",
