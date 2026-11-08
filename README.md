@@ -49,6 +49,7 @@ Ask Claude natural language questions about your finances:
 - **"Show me all my scheduled transactions"**
 - **"What recurring payments do I have coming up?"**
 - **"Analyze how my next salary covers my commitments"**
+- **"Month by month, does my income cover what leaves my bank, including card payments?"**
 - **"When will my subscriptions and loans end?"**
 
 ### 💵 Budget Management
@@ -307,7 +308,8 @@ Once configured, Claude will have access to these MoneyWiz tools:
 
 ### Scheduled Transactions & Recurring Payments
 - **`get_scheduled_transactions`** - List all scheduled and recurring transactions
-- **`analyze_salary_breakdown`** - Analyze how salary covers commitments
+- **`analyze_salary_breakdown`** - Analyze how salary covers commitments (expense view: bills charged to cards count, card payments don't)
+- **`analyze_monthly_cash_flow`** - Month by month, check that income covers the money leaving bank accounts (cash view: card payments from statements, loans, savings), with the projected bank balance
 - **`get_commitments_ending_timeline`** - Track when subscriptions, loans, and recurring payments end
 
 ### Budget Management

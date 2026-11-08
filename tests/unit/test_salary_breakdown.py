@@ -105,7 +105,7 @@ def make_service(monkeypatch):
     def _make(schedules, rates=USD_BASE):
         service = ScheduledTransactionService(MagicMock(spec=DatabaseManager))
         service.get_scheduled_transactions = AsyncMock(return_value=schedules)
-        service._get_account_kinds = AsyncMock(return_value=ACCOUNT_KINDS)
+        service.get_account_kinds = AsyncMock(return_value=ACCOUNT_KINDS)
         monkeypatch.setattr(
             ExchangeRateService, "get_rates", AsyncMock(return_value=rates)
         )
@@ -358,7 +358,7 @@ class TestTransfers:
         db = DatabaseManager(str(path), read_only=True)
         await db.initialize()
         try:
-            kinds = await ScheduledTransactionService(db)._get_account_kinds()
+            kinds = await ScheduledTransactionService(db).get_account_kinds()
         finally:
             await db.close()
         assert kinds == {"1": AccountKind.LIQUID, "2": AccountKind.LOAN}

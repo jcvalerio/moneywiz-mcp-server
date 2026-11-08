@@ -6,6 +6,12 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+### Added
+
+- `analyze_monthly_cash_flow`: a monthly cash view. For each calendar month and currency, it checks whether scheduled income covers what has to leave bank accounts: payments from bank accounts, loan payments, savings contributions, and what each credit card needs from the bank. Bills charged to a card count only as part of that card's payment.
+  - **Card payments:** a one-time payment scheduled after the statement closed is confirmed. Otherwise the statement is computed from the card's transactions and its closing day. A closed statement shows the charges minus payments already made. An open one shows charges so far plus card bills scheduled until it closes.
+  - **Each month also reports:** a verdict (covered, tight or short), combined totals, the projected bank balance at month end, and the monthly budgets still to spend.
+
 ### Compatibility notes
 
 - **MCP tool schema changes:**

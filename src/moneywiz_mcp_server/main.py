@@ -19,6 +19,7 @@ from .models.budget import (
     BudgetResponse,
     BudgetVsActualResponse,
 )
+from .models.cash_flow import CashFlowResponse
 from .models.responses import (
     AccountDetailResponse,
     AccountListResponse,
@@ -41,6 +42,7 @@ from .models.scheduled_transaction import (
 )
 from .models.transaction import TransactionType
 from .services.budget_service import BudgetService
+from .services.cash_flow_service import CashFlowService
 from .services.savings_service import SavingsService
 from .services.scheduled_transaction_service import ScheduledTransactionService
 from .services.transaction_service import TransactionService
@@ -873,6 +875,78 @@ async def analyze_salary_breakdown(
     except Exception as e:
         logger.error(f"❌ Failed to analyze salary breakdown: {e}")
         raise RuntimeError(f"Failed to analyze salary breakdown: {e!s}") from e
+
+
+@mcp.tool()
+async def analyze_monthly_cash_flow(
+    months: int = 3,
+    start_month: str | None = None,
+    display_currency: str | None = None,
+    exchange_rates: dict[str, float] | None = None,
+    count_savings_as_obligations: bool = True,
+    include_budgets: bool = True,
+) -> CashFlowResponse:
+    """
+    Check, month by month, whether income covers the money that has to leave
+    your bank accounts: the cash view.
+
+    Per calendar month and currency: scheduled income into bank, savings or
+    cash accounts, minus payments from those accounts, loan payments,
+    savings contributions and what each credit card needs from the bank.
+    Bills charged to a card are not counted on their own; they are part of
+    that card's payment. Accounts are classified by their MoneyWiz type.
+
+    Card payments: a one-time scheduled payment after the statement closed
+    is confirmed. Otherwise the card's statement is computed from its
+    transactions: a closed statement minus payments already made
+    (pending_reconcile), or, for a statement still open, charges so far plus
+    card bills scheduled until it closes (projected; a higher recurring
+    scheduled payment is used instead). Statements use each card's closing
+    day in MoneyWiz; cards on the default 31 are listed.
+
+    The current month covers what is still to come. Each month gets a
+    verdict (covered, tight, short), the projected bank balance at month end
+    and the monthly budgets still to spend; the last two are not part of the
+    verdict.
+
+    Args:
+        months: Number of calendar months (1-12)
+        start_month: First month as YYYY-MM (default: the current month)
+        display_currency: Currency for the combined totals (default: the
+            MoneyWiz base currency)
+        exchange_rates: Optional rate overrides as units of each currency per
+            1 display_currency, e.g. {"CRC": 505} with display_currency USD
+        count_savings_as_obligations: Count bank -> Investment transfers
+            (e.g. retirement contributions) as obligations (default true)
+        include_budgets: Report monthly budgets still to spend (default true)
+
+    Returns:
+        One entry per month with income, obligations by kind, card payment
+        details, the verdict and combined totals
+    """
+    logger.info("💵 Analyzing monthly cash flow")
+
+    try:
+        db_manager = await get_db_manager()
+        try:
+            from datetime import datetime
+
+            start = datetime.strptime(start_month, "%Y-%m") if start_month else None
+            data = await CashFlowService(db_manager).analyze(
+                months=months,
+                start_month=start,
+                display_currency=display_currency,
+                exchange_rates=exchange_rates,
+                count_savings_as_obligations=count_savings_as_obligations,
+                include_budgets=include_budgets,
+            )
+            return CashFlowResponse(**data)
+        finally:
+            await db_manager.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to analyze monthly cash flow: {e}")
+        raise RuntimeError(f"Failed to analyze monthly cash flow: {e!s}") from e
 
 
 @mcp.tool()

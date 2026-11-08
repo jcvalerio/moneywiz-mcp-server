@@ -730,7 +730,7 @@ class ScheduledTransactionService:
 
         return f"Payee_{payee_id}"
 
-    async def _get_account_kinds(self) -> dict[str, AccountKind]:
+    async def get_account_kinds(self) -> dict[str, AccountKind]:
         """Account Z_PK (as str) -> kind, from each account's entity type."""
         entity_map = await self.db_manager.get_entity_name_map()
         kind_by_ent = {
@@ -931,7 +931,7 @@ class ScheduledTransactionService:
         ending_soon_commitments: list[CommitmentBreakdown] = []
         commitments_by_currency: dict[str, Decimal] = {}
 
-        account_kinds = await self._get_account_kinds() if transfers else {}
+        account_kinds = await self.get_account_kinds() if transfers else {}
         transfers_by_kind: dict[str, dict[str, Decimal]] = {}
         unclassified: list[str] = []
         counted: list[tuple[ScheduledTransactionModel, str, list[datetime]]] = [
