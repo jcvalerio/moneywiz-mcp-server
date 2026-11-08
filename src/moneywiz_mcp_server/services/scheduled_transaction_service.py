@@ -9,6 +9,7 @@ from typing import Any
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.models.currency_types import CurrencyAmounts
 from moneywiz_mcp_server.models.scheduled_transaction import (
+    CategorySplit,
     CommitmentBreakdown,
     DisplayCurrencyTotals,
     ExchangeRateUsed,
@@ -308,6 +309,7 @@ class ScheduledTransactionService:
                 root_category=category_info["root_category"],
                 category_path=category_info["category_path"],
                 category_hierarchy=category_info["category_hierarchy"],
+                category_splits=category_info["category_splits"],
                 payee=payee or "Unknown",
                 transaction_type=self._infer_transaction_type(amount, entity_role),
                 tags=tags,
@@ -400,40 +402,81 @@ class ScheduledTransactionService:
     async def _get_category_info_for_scheduled(
         self, record: dict[str, Any]
     ) -> dict[str, Any]:
-        """Get assigned leaf category and hierarchy for a scheduled transaction."""
-        category_id = await self._get_category_id_for_scheduled(record)
+        """Main category, its hierarchy, and every split of a scheduled transaction.
+
+        A schedule can be split across several categories, each with its own
+        amount (e.g. a loan payment: principal, interest and insurance). The
+        main category is the split with the largest amount; all splits are
+        returned in "category_splits" when there is more than one.
+        """
+        assignments = await self._get_category_assignments(record)
+        category_id = self._primary_category_id(assignments)
         if category_id is None:
             return self._empty_category_info()
 
-        return await self._build_category_info(category_id)
+        info = await self._build_category_info(category_id)
+        if len(assignments) > 1:
+            splits = []
+            for split_id, amount in assignments:
+                split_info = (
+                    info
+                    if split_id == category_id
+                    else await self._build_category_info(split_id)
+                )
+                splits.append(
+                    CategorySplit(
+                        category=split_info["category"] or "Uncategorized",
+                        category_id=split_id,
+                        category_path=split_info["category_path"],
+                        amount=abs(amount) if amount is not None else None,
+                    )
+                )
+            info["category_splits"] = splits
+        return info
 
-    async def _get_category_id_for_scheduled(
-        self, record: dict[str, Any]
+    @staticmethod
+    def _primary_category_id(
+        assignments: list[tuple[int, Decimal | None]],
     ) -> int | None:
-        """Get the assigned category ID for a scheduled transaction."""
+        """The category with the largest amount; the first stored on a tie."""
+        if not assignments:
+            return None
+        return max(assignments, key=lambda a: abs(a[1] or Decimal(0)))[0]
+
+    async def _get_category_assignments(
+        self, record: dict[str, Any]
+    ) -> list[tuple[int, Decimal | None]]:
+        """(category ID, split amount) for each category of a scheduled transaction."""
         scheduled_id = record.get("Z_PK")
         if scheduled_id:
             try:
-                # MoneyWiz stores scheduled category links in ZCATEGORYASSIGMENT.
+                # MoneyWiz stores scheduled category links in ZCATEGORYASSIGMENT,
+                # one row per category with that category's share in ZAMOUNT.
                 # Column names keep MoneyWiz/Core Data's misspelling of "TRANSACITION".
                 # Join on ZSCHEDULEDTRANSACITION (the Z_PK) only: the sibling
                 # Z<n>_SCHEDULEDTRANSACITION column holds the target's Z_ENT, and
                 # its name changes with the model's entity ids.
                 category_assignment_query = """
-                SELECT ca.ZCATEGORY
+                SELECT ca.ZCATEGORY, ca.ZAMOUNT
                 FROM ZCATEGORYASSIGMENT ca
                 WHERE ca.ZSCHEDULEDTRANSACITION = ?
                 ORDER BY ca.Z_PK
-                LIMIT 1
                 """
-                category_assignment = await self.db_manager.execute_query(
+                rows = await self.db_manager.execute_query(
                     category_assignment_query, (scheduled_id,)
                 )
-
-                if category_assignment:
-                    category_id = category_assignment[0].get("ZCATEGORY")
-                    if isinstance(category_id, int):
-                        return category_id
+                assignments = [
+                    (
+                        row["ZCATEGORY"],
+                        Decimal(str(row["ZAMOUNT"]))
+                        if row.get("ZAMOUNT") is not None
+                        else None,
+                    )
+                    for row in rows or []
+                    if isinstance(row.get("ZCATEGORY"), int)
+                ]
+                if assignments:
+                    return assignments
 
             except Exception as e:
                 logger.warning(
@@ -443,9 +486,9 @@ class ScheduledTransactionService:
         for field_name in ("ZCATEGORY", "ZCATEGORY1", "ZCATEGORY2"):
             category_id = record.get(field_name)
             if isinstance(category_id, int):
-                return category_id
+                return [(category_id, None)]
 
-        return None
+        return []
 
     @staticmethod
     def _empty_category_info() -> dict[str, Any]:
@@ -458,6 +501,7 @@ class ScheduledTransactionService:
             "root_category": None,
             "category_path": None,
             "category_hierarchy": [],
+            "category_splits": [],
         }
 
     async def _build_category_info(self, category_id: int) -> dict[str, Any]:
@@ -477,6 +521,7 @@ class ScheduledTransactionService:
             "root_category": hierarchy_names[0],
             "category_path": " ▶ ".join(hierarchy_names),
             "category_hierarchy": hierarchy_names,
+            "category_splits": [],
         }
 
     async def _get_category_hierarchy(self, category_id: int) -> list[dict[str, Any]]:
@@ -927,6 +972,7 @@ class ScheduledTransactionService:
                 commitment_type=t.commitment_type,
                 urgency_level=t.urgency_level,
                 kind=commitment_kind,
+                category_splits=t.category_splits,
             )
             by_kind = commitments_by_kind.setdefault(commitment_kind, {})
             by_kind[t.currency] = by_kind.get(t.currency, Decimal("0")) + total_impact

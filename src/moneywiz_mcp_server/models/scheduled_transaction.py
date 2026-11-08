@@ -37,6 +37,29 @@ class WeekendHandling(StrEnum):
     PREVIOUS_WEEKDAY = "previous_weekday"  # Move to previous weekday
 
 
+class CategorySplit(BaseModel):
+    """One category of a scheduled transaction split across several."""
+
+    category: str = Field(..., description="Leaf category name")
+    category_id: int | None = Field(None, description="Category ID")
+    category_path: str | None = Field(None, description="Full category path")
+    amount: Decimal | None = Field(
+        None, description="This category's share of the amount (positive)"
+    )
+
+    @field_serializer("amount")
+    def _serialize_amount(self, value: Decimal | None) -> float | None:
+        return float(value) if value is not None else None
+
+
+SPLITS_DESCRIPTION = (
+    "Every category with its share of the amount, when the transaction is "
+    "split across several (e.g. a loan payment's principal, interest and "
+    "insurance). Empty when there is a single category, which is then "
+    "`category`; when split, `category` is the largest share."
+)
+
+
 class ScheduledTransactionModel(BaseModel):
     """Model for scheduled transaction data with occurrence tracking."""
 
@@ -59,6 +82,9 @@ class ScheduledTransactionModel(BaseModel):
     category_path: str | None = Field(None, description="Full category hierarchy path")
     category_hierarchy: list[str] = Field(
         default_factory=list, description="Category hierarchy from root to leaf"
+    )
+    category_splits: list[CategorySplit] = Field(
+        default_factory=list, description=SPLITS_DESCRIPTION
     )
     payee: str = Field(..., description="Transaction payee")
     transaction_type: TransactionType = Field(..., description="Type of transaction")
@@ -184,6 +210,9 @@ class CommitmentBreakdown(BaseModel):
         ..., description="Type: finite, infinite, ending_soon, one_time"
     )
     urgency_level: str = Field(..., description="Urgency: immediate, regular, ending")
+    category_splits: list[CategorySplit] = Field(
+        default_factory=list, description=SPLITS_DESCRIPTION
+    )
     kind: str = Field(
         "expense",
         description="expense (scheduled withdrawal), debt_payment (bank -> Loan "
@@ -249,6 +278,9 @@ class ScheduledTransactionResponse(BaseModel):
     category_path: str | None = Field(None, description="Full category hierarchy path")
     category_hierarchy: list[str] = Field(
         default_factory=list, description="Category hierarchy from root to leaf"
+    )
+    category_splits: list[CategorySplit] = Field(
+        default_factory=list, description=SPLITS_DESCRIPTION
     )
     payee: str = Field(..., description="Transaction payee")
     account_id: str = Field(..., description="Associated account ID")

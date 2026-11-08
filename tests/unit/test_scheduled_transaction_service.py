@@ -473,12 +473,12 @@ class TestScheduledCategoryAgainstSqlite:
                 Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, ZCATEGORY INTEGER,
                 ZSCHEDULEDTRANSACITION INTEGER,
                 Z{handler_ent}_SCHEDULEDTRANSACITION INTEGER,
-                ZTRANSACTION INTEGER)"""
+                ZTRANSACTION INTEGER, ZAMOUNT REAL)"""
         )
         # Scheduled handler Z_PK 500 is assigned category 42; the type column
         # holds the handler's Z_ENT, never its Z_PK.
         conn.execute(
-            "INSERT INTO ZCATEGORYASSIGMENT VALUES (1, 2, 42, 500, ?, NULL)",
+            "INSERT INTO ZCATEGORYASSIGMENT VALUES (1, 2, 42, 500, ?, NULL, 10)",
             (handler_ent + 2,),
         )
         conn.commit()
@@ -488,7 +488,65 @@ class TestScheduledCategoryAgainstSqlite:
         await db.initialize()
         try:
             service = ScheduledTransactionService(db)
-            assert await service._get_category_id_for_scheduled({"Z_PK": 500}) == 42
-            assert await service._get_category_id_for_scheduled({"Z_PK": 501}) is None
+            assert await service._get_category_assignments({"Z_PK": 500}) == [
+                (42, Decimal("10.0"))
+            ]
+            assert await service._get_category_assignments({"Z_PK": 501}) == []
         finally:
             await db.close()
+
+    @pytest.mark.asyncio
+    async def test_split_schedule_reports_every_category(self, tmp_path):
+        """A loan payment split into principal, interest and insurance keeps
+        all three; the main category is the largest share, not the first."""
+        path = tmp_path / "moneywiz.sqlite"
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER, Z_NAME VARCHAR)")
+        conn.execute("INSERT INTO Z_PRIMARYKEY VALUES (20, 'Category')")
+        conn.execute(
+            """CREATE TABLE ZCATEGORYASSIGMENT (
+                Z_PK INTEGER PRIMARY KEY, ZCATEGORY INTEGER,
+                ZSCHEDULEDTRANSACITION INTEGER, ZAMOUNT REAL)"""
+        )
+        conn.executemany(
+            "INSERT INTO ZCATEGORYASSIGMENT VALUES (?, ?, 500, ?)",
+            [(1, 71, 30.0), (2, 72, 270.0), (3, 73, 600.0)],
+        )
+        conn.execute(
+            """CREATE TABLE ZSYNCOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER,
+               ZNAME2 TEXT, ZPARENTCATEGORY INTEGER)"""
+        )
+        conn.executemany(
+            "INSERT INTO ZSYNCOBJECT VALUES (?, 20, ?, NULL)",
+            [(71, "Insurance"), (72, "Interest"), (73, "Principal")],
+        )
+        conn.commit()
+        conn.close()
+
+        db = DatabaseManager(str(path), read_only=True)
+        await db.initialize()
+        try:
+            service = ScheduledTransactionService(db)
+            info = await service._get_category_info_for_scheduled({"Z_PK": 500})
+        finally:
+            await db.close()
+
+        assert info["category"] == "Principal"
+        splits = [(s.category, s.amount) for s in info["category_splits"]]
+        assert splits == [
+            ("Insurance", Decimal("30.0")),
+            ("Interest", Decimal("270.0")),
+            ("Principal", Decimal("600.0")),
+        ]
+
+    @pytest.mark.parametrize(
+        ("assignments", "expected"),
+        [
+            ([], None),
+            ([(1, None)], 1),
+            ([(1, Decimal("5")), (2, Decimal("-9"))], 2),
+            ([(1, Decimal("5")), (2, Decimal("5"))], 1),
+        ],
+    )
+    def test_primary_category_is_the_largest_share(self, assignments, expected):
+        assert ScheduledTransactionService._primary_category_id(assignments) == expected
