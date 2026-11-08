@@ -191,3 +191,41 @@ async def load_loan_plans(db_manager: DatabaseManager) -> LoanPlans:
                 "schedule's split"
             )
     return plans
+
+
+async def loan_payment_costs(db_manager: DatabaseManager) -> dict[int, float]:
+    """Cost (interest, insurance, fees) paid into each loan account, by Z_PK.
+
+    A payment into a Loan account can be split across categories. MoneyWiz
+    lowers the loan's balance only by the split in the payment plan's
+    principal category; the other splits are expenses. A loan's balance is
+    therefore its opening balance plus its transactions minus this cost.
+    Loans without a plan (or whose plan names no principal category) have
+    no cost: their payments count in full, as before.
+    """
+    entity_map = await db_manager.get_entity_name_map()
+    plan_ent = entity_map.get("PaymentPlan")
+    deposit_ent = entity_map.get("TransferDepositTransaction")
+    if plan_ent is None or deposit_ent is None:
+        return {}
+    try:
+        rows = await db_manager.execute_query(
+            "SELECT t.ZACCOUNT2 AS loan, SUM(ABS(ca.ZAMOUNT)) AS cost "
+            "FROM ZSYNCOBJECT t "
+            "JOIN ZCATEGORYASSIGMENT ca ON ca.ZTRANSACTION = t.Z_PK "
+            "JOIN (SELECT ZLOANACCOUNT, MIN(ZCATEGORYPRINCIPAL) AS principal "
+            "      FROM ZSYNCOBJECT WHERE Z_ENT = ? AND ZLOANACCOUNT IS NOT NULL "
+            "      AND ZCATEGORYPRINCIPAL IS NOT NULL GROUP BY ZLOANACCOUNT) p "
+            "  ON p.ZLOANACCOUNT = t.ZACCOUNT2 "
+            "WHERE t.Z_ENT = ? AND ca.ZAMOUNT IS NOT NULL "
+            "AND ca.ZCATEGORY IS NOT p.principal "
+            "GROUP BY t.ZACCOUNT2",
+            (plan_ent, deposit_ent),
+        )
+    except Exception:
+        logger.exception(
+            "Could not read loan payment splits; loan balances count every "
+            "payment in full"
+        )
+        return {}
+    return {r["loan"]: float(r["cost"]) for r in rows if r["cost"]}

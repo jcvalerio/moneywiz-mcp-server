@@ -28,6 +28,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ### Fixed
 
+- Loan balances drop only by the principal part of each payment, as in MoneyWiz. When a payment into a loan is split across categories, the splits outside the payment plan's principal category (interest, insurance, fees) are expenses and no longer lower the balance. Loans without a payment plan are unchanged.
 - Investment and Forex (crypto) account balances now include what the accounts hold. Investment accounts add their shares at the latest price to their cash. Forex accounts are valued by the quantity held in each currency, not by the sum of past transaction values, which mixed historical prices and was often negative. Accounts report `cash_balance`, `holdings_value` and `holdings_without_price`, and `balance` is their total.
 - `get_account` failed on every account: its response was missing `account_info` and `last_four_digits`, and `created_date` was a raw timestamp. It now returns them, with `created_date` as an ISO date.
 - `analyze_salary_breakdown` counts every paycheck in the period (a biweekly salary over 3 months is 7 payments, not 1) and income in every currency.
