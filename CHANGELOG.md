@@ -25,6 +25,7 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 - Scheduled transfers are classified from the MoneyWiz types of their accounts. Loan payments and savings contributions count as commitments. Credit card payments, internal moves, and transfers out of a card or loan don't.
 - One-time scheduled transactions were never loaded. Schedules that end ("after N repeats" or "on date") were treated as endless. Both are now counted correctly.
 - The MoneyWiz base currency is detected from the currency with the most rate-1 transactions. Rates are read from deposits, withdrawals and refunds only, because transfers store the rate between their two accounts.
+- Scheduled transactions split across several categories (for example a loan payment's principal, interest and insurance, or a subscription plus its tax) reported only one category, the first stored. `get_scheduled_transactions` and each commitment in `analyze_salary_breakdown` now include `category_splits` with every category and its amount, and `category` is the largest share.
 - The MCP handshake now reports the server's own version. It previously reported the `mcp` SDK's version (for example `1.30.0`) because FastMCP 1.x has no version setting.
 
 ## 2.0.0 - 2026-11-02

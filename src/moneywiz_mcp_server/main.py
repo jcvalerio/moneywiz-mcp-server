@@ -732,6 +732,7 @@ async def get_scheduled_transactions(
                     root_category=transaction.root_category,
                     category_path=transaction.category_path,
                     category_hierarchy=transaction.category_hierarchy,
+                    category_splits=transaction.category_splits,
                     payee=transaction.payee,
                     account_id=transaction.account_id,
                     recurrence_pattern=transaction.recurrence_pattern.value,
