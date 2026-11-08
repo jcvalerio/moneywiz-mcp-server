@@ -5,6 +5,7 @@ from typing import Any
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
 from moneywiz_mcp_server.services.holdings_service import HoldingsValuer
+from moneywiz_mcp_server.services.loan_plans import loan_payment_costs
 from moneywiz_mcp_server.services.transaction_service import (
     ACCOUNT_ENTITY_NAMES,
     TRANSACTION_TYPE_ENTITY_NAMES,
@@ -65,6 +66,8 @@ class AccountService:
         valuations = await HoldingsValuer(self.db_manager).value_accounts()
         holdings_valued = valuations is not None
         valuations = valuations or {}
+        # Loans: only the principal split of a payment lowers the balance.
+        loan_costs = await loan_payment_costs(self.db_manager)
 
         accounts_data = []
         for entity_id in account_entities:
@@ -106,7 +109,11 @@ class AccountService:
                     if balance_result and balance_result[0]["total"]
                     else 0
                 )
-                cash_balance = opening_balance + transaction_total
+                cash_balance = (
+                    opening_balance
+                    + transaction_total
+                    - loan_costs.get(account["Z_PK"], 0.0)
+                )
                 held = valuations.get(account["Z_PK"])
                 if held is not None and held.cash is not None:
                     # Forex: what's held in the account currency, not the
