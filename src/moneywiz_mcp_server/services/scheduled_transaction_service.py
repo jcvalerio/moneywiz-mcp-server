@@ -268,6 +268,8 @@ class ScheduledTransactionService:
             )
 
             executes_count = record.get("ZEXECUTESCOUNT", 0)
+            if record.get("ZISREPEATABLE1") == 0 and (executes_count or 0) > 0:
+                return None  # a one-time schedule that has already run
             (
                 is_one_time,
                 end_condition,
@@ -751,7 +753,7 @@ class ScheduledTransactionService:
         Raises:
             ValueError: invalid frequency, rate, or an undeterminable currency.
         """
-        logger.info(f"💰 Calculating salary breakdown for {next_salary_date}")
+        logger.info("💰 Calculating salary breakdown")
 
         scheduled_transactions = await self.get_scheduled_transactions()
         period_start = next_salary_date
@@ -799,6 +801,7 @@ class ScheduledTransactionService:
                     else None
                 )
                 or rates.anchor
+                # Last resort: every schedule uses the same currency.
                 or (
                     scheduled_transactions[0].currency
                     if len({t.currency for t in scheduled_transactions}) == 1
@@ -838,9 +841,16 @@ class ScheduledTransactionService:
             )
             salary_per_payment[salary_currency] = salary_amount
             # The provided salary replaces scheduled income in its currency.
+            replaced = [
+                t.description
+                for t in deposits
+                if t.currency == salary_currency and in_period(t)
+            ]
             deposits = [t for t in deposits if t.currency != salary_currency]
-        elif salary_frequency:
-            parse_frequency(salary_frequency)  # validate even if unused
+        else:
+            replaced = []
+            if salary_frequency:
+                parse_frequency(salary_frequency)  # validate even if unused
 
         for t in deposits:
             dates = in_period(t)
@@ -879,8 +889,8 @@ class ScheduledTransactionService:
         account_kinds = await self._get_account_kinds() if transfers else {}
         transfers_by_kind: dict[str, dict[str, Decimal]] = {}
         unclassified: list[str] = []
-        counted: list[tuple[ScheduledTransactionModel, str]] = [
-            (t, "expense") for t in withdrawals
+        counted: list[tuple[ScheduledTransactionModel, str, list[datetime]]] = [
+            (t, "expense", in_period(t)) for t in withdrawals
         ]
         for t in transfers:
             dates = in_period(t)
@@ -896,11 +906,10 @@ class ScheduledTransactionService:
             elif kind is TransferKind.DEBT_PAYMENT or (
                 kind is TransferKind.SAVINGS and count_savings_as_commitments
             ):
-                counted.append((t, kind.value))
+                counted.append((t, kind.value, dates))
 
         commitments_by_kind: dict[str, dict[str, Decimal]] = {}
-        for t, commitment_kind in counted:
-            dates = in_period(t)
+        for t, commitment_kind, dates in counted:
             if not dates:
                 continue
             amount = abs(t.amount)
@@ -983,7 +992,11 @@ class ScheduledTransactionService:
                 commitments=round(float(commitments_total), 2),
                 remaining=round(float(income_total - commitments_total), 2),
             )
-            coverage_analysis = self._coverage(income_total, commitments_total)
+            coverage_analysis = (
+                "incomplete"
+                if without_rate
+                else self._coverage(income_total, commitments_total)
+            )
         else:
             coverage_analysis = "unknown"
 
@@ -994,6 +1007,7 @@ class ScheduledTransactionService:
             has_income=bool(income_sources),
             without_rate=without_rate,
             unclassified=unclassified,
+            replaced_income=replaced,
         )
         commitment_end_analysis = self._analyze_commitment_endings(
             finite_commitments + ending_soon_commitments
@@ -1054,6 +1068,7 @@ class ScheduledTransactionService:
         has_income: bool = True,
         without_rate: list[str] | None = None,
         unclassified: list[str] | None = None,
+        replaced_income: list[str] | None = None,
     ) -> list[str]:
         """Generate salary recommendations; amounts are kept per currency."""
         recommendations = []
@@ -1076,8 +1091,15 @@ class ScheduledTransactionService:
         if without_rate:
             recommendations.append(
                 f"📌 No exchange rate for {', '.join(without_rate)}; those "
-                "amounts are excluded from the combined totals. Pass "
-                "exchange_rates to include them."
+                "amounts are excluded from the combined totals, so there is "
+                "no coverage verdict (incomplete). Pass exchange_rates to "
+                "include them."
+            )
+        if replaced_income:
+            recommendations.append(
+                "📌 The provided salary replaces the scheduled income in its "
+                f"currency: {', '.join(sorted(set(replaced_income)))}. Leave "
+                "salary_amount out to count every scheduled deposit."
             )
 
         if unclassified:

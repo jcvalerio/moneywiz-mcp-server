@@ -88,8 +88,10 @@ class ExchangeRates:
                 raise ValueError(
                     f"Invalid exchange rate for {code}: {value!r}"
                 ) from None
-            if rate <= 0:
-                raise ValueError(f"Exchange rate for {code} must be positive")
+            if not rate.is_finite() or rate <= 0:
+                raise ValueError(
+                    f"Exchange rate for {code} must be a positive finite number"
+                )
             rates[code.upper()] = RateInfo(rate, None, SOURCE_PROVIDED)
         return ExchangeRates(anchor=self.anchor, rates=rates)
 
@@ -121,12 +123,7 @@ class ExchangeRateService:
 
         placeholders = ",".join("?" for _ in account_ids)
         tx_placeholders = ",".join("?" for _ in tx_ids)
-        # Latest transaction per account currency that carries a rate. SQLite
-        # returns the bare columns from the row holding MAX(t.ZDATE1).
-        query = f"""
-            SELECT a.ZCURRENCYNAME AS currency,
-                   t.ZCURRENCYEXCHANGERATE AS rate,
-                   MAX(t.ZDATE1) AS date
+        source = f"""
             FROM ZSYNCOBJECT t
             JOIN ZSYNCOBJECT a ON a.Z_PK = t.ZACCOUNT2
             WHERE a.Z_ENT IN ({placeholders})
@@ -136,10 +133,39 @@ class ExchangeRateService:
               AND (t.ZORIGINALCURRENCY IS NULL
                    OR t.ZORIGINALCURRENCY = a.ZCURRENCYNAME)
               AND t.ZDATE1 IS NOT NULL
+        """  # nosec B608 - placeholders only, values are bound
+        params = (*account_ids, *tx_ids)
+        # The base currency is the one whose transactions carry rate 1. A
+        # foreign-currency transaction can also carry 1 by mistake, so pick
+        # the currency with the most rate-1 transactions, not the first.
+        base_query = f"""
+            SELECT a.ZCURRENCYNAME AS currency, COUNT(*) AS n
+            {source} AND t.ZCURRENCYEXCHANGERATE = 1
+            GROUP BY a.ZCURRENCYNAME
+            ORDER BY n DESC
+        """  # nosec B608 - placeholders only, values are bound
+        # Latest rate per currency, skipping stray rate-1 rows of non-base
+        # currencies. SQLite returns the bare columns (rate) from the row
+        # holding MAX(t.ZDATE1).
+        latest_query = f"""
+            SELECT a.ZCURRENCYNAME AS currency,
+                   t.ZCURRENCYEXCHANGERATE AS rate,
+                   MAX(t.ZDATE1) AS date
+            {source} AND (t.ZCURRENCYEXCHANGERATE <> 1 OR a.ZCURRENCYNAME = ?)
             GROUP BY a.ZCURRENCYNAME
         """  # nosec B608 - placeholders only, values are bound
         try:
-            rows = await self.db_manager.execute_query(query, (*account_ids, *tx_ids))
+            candidates = await self.db_manager.execute_query(base_query, params)
+            if not candidates:
+                logger.warning("No base currency (rate 1) found in MoneyWiz rates")
+                return ExchangeRates(anchor=None)
+            base = candidates[0]["currency"]
+            if len(candidates) > 1:
+                logger.info(
+                    f"Base currency {base}; other currencies with rate-1 "
+                    f"transactions: {[c['currency'] for c in candidates[1:]]}"
+                )
+            rows = await self.db_manager.execute_query(latest_query, (*params, base))
         except Exception as e:
             logger.warning(f"Could not read exchange rates: {e}")
             return ExchangeRates(anchor=None)
@@ -150,16 +176,8 @@ class ExchangeRateService:
             if not currency or not rate:
                 continue
             rates[currency] = RateInfo(
-                Decimal(str(rate)),
+                Decimal(1) if currency == base else Decimal(str(rate)),
                 core_data_timestamp_to_datetime(date) if date is not None else None,
                 SOURCE_MONEYWIZ,
             )
-
-        base = next(
-            (c for c, info in rates.items() if info.units_per_anchor == 1), None
-        )
-        if base is None:
-            if rates:
-                logger.warning("No base currency (rate 1) found in MoneyWiz rates")
-            return ExchangeRates(anchor=None)
         return ExchangeRates(anchor=base, rates=rates)

@@ -839,7 +839,7 @@ async def analyze_salary_breakdown(
         Income and commitments per currency, combined totals with the
         exchange rates used, and a coverage verdict
     """
-    logger.info(f"💰 Analyzing salary breakdown for {next_salary_date}")
+    logger.info("💰 Analyzing salary breakdown")
 
     try:
         db_manager = await get_db_manager()

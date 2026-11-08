@@ -217,6 +217,10 @@ class TestCurrencies:
         )
         assert result["income_in_period"]["USD"] == Decimal("3600")
         assert result["income_in_period"]["CRC"] == Decimal("150000")
+        replaced = [r for r in result["recommendations"] if "replaces" in r]
+        assert len(replaced) == 1
+        assert "Salary" in replaced[0]
+        assert "Side income" not in replaced[0]
 
     async def test_caller_rates_override_moneywiz(self, make_service):
         service = make_service([deposit("x", "1000", "CRC")])
@@ -234,6 +238,8 @@ class TestCurrencies:
         assert result["currencies_without_rate"] == ["EUR"]
         assert result["totals_in_display_currency"].commitments == 0
         assert any("EUR" in r for r in result["recommendations"])
+        # A currency left out of the totals means no verdict.
+        assert result["coverage_analysis"] == "incomplete"
 
     async def test_no_income_is_unknown_not_insufficient(self, make_service):
         service = make_service([bill("Rent", "-500", "USD")])
@@ -404,6 +410,22 @@ class TestScheduleEnds:
         )
         assert final.date() == datetime(2027, 3, 1).date()
 
+    async def test_one_time_schedule_that_already_ran_is_skipped(self):
+        service = ScheduledTransactionService(MagicMock(spec=DatabaseManager))
+        record = {
+            "Z_PK": 1,
+            "ZAMOUNT": -10.0,
+            "ZEXECUTEDATE": datetime_to_core_data_timestamp(START),
+            "ZISREPEATABLE1": 0,
+            "ZEXECUTESCOUNT": 1,
+        }
+        assert (
+            await service._convert_record_to_model(
+                record, 0, ScheduledEntityRole.REGULAR
+            )
+            is None
+        )
+
     def test_schedule_past_its_end_has_no_payments_left(self):
         end = datetime_to_core_data_timestamp(datetime(2026, 12, 1))
         assert self.end_of({"ZISREPEATABLE1": 1, "ZLASTEXECUTEDATE": end})[3] == 0
@@ -524,6 +546,48 @@ class TestExchangeRateService:
         db.get_entity_name_map = AsyncMock(return_value={})
         rates = await ExchangeRateService(db).get_rates()
         assert rates.anchor is None
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), 0, -5])
+    def test_overrides_must_be_positive_and_finite(self, value):
+        with pytest.raises(ValueError, match="positive finite"):
+            USD_BASE.with_overrides({"CRC": value})
+
+    async def test_base_currency_is_the_one_with_most_rate_one_rows(self, tmp_path):
+        path = tmp_path / "moneywiz.sqlite"
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER, Z_NAME VARCHAR)")
+        conn.executemany(
+            "INSERT INTO Z_PRIMARYKEY VALUES (?, ?)",
+            [(10, "BankChequeAccount"), (20, "WithdrawTransaction")],
+        )
+        conn.execute(
+            """CREATE TABLE ZSYNCOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER,
+               ZCURRENCYNAME TEXT, ZACCOUNT2 INTEGER, ZCURRENCYEXCHANGERATE REAL,
+               ZORIGINALCURRENCY TEXT, ZDATE1 REAL)"""
+        )
+        conn.executemany(
+            "INSERT INTO ZSYNCOBJECT VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (1, 10, "USD", None, None, None, None),
+                (2, 10, "CRC", None, None, None, None),
+                (100, 20, None, 1, 1.0, "USD", 1000.0),
+                (101, 20, None, 1, 1.0, "USD", 1100.0),
+                (102, 20, None, 2, 505.0, "CRC", 1000.0),
+                # The newest CRC row carries a stray rate of 1.
+                (103, 20, None, 2, 1.0, "CRC", 2000.0),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        db = DatabaseManager(str(path), read_only=True)
+        await db.initialize()
+        try:
+            rates = await ExchangeRateService(db).get_rates()
+        finally:
+            await db.close()
+        assert rates.anchor == "USD"
+        assert rates.rates["CRC"].units_per_anchor == Decimal("505.0")
 
     def test_rebase_and_overrides(self):
         crc = USD_BASE.rebase("CRC")

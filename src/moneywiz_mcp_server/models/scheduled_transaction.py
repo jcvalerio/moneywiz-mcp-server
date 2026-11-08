@@ -326,7 +326,9 @@ class SalaryBreakdownResponse(BaseCurrencyResponse):
         ..., description="Amount remaining after commitments by currency"
     )
     coverage_analysis: str = Field(
-        ..., description="sufficient/tight/insufficient coverage analysis"
+        ...,
+        description="sufficient/tight/insufficient; unknown when no income "
+        "was found; incomplete when a currency has no exchange rate",
     )
     commitment_end_analysis: str = Field(
         ..., description="Analysis of when commitments will end"
