@@ -19,6 +19,12 @@ from moneywiz_mcp_server.models.scheduled_transaction import (
     WeekendHandling,
 )
 from moneywiz_mcp_server.models.transaction import TransactionType
+from moneywiz_mcp_server.services.account_kinds import (
+    ACCOUNT_KIND_BY_ENTITY,
+    AccountKind,
+    TransferKind,
+    classify_transfer,
+)
 from moneywiz_mcp_server.services.exchange_rate_service import ExchangeRateService
 from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
@@ -231,6 +237,12 @@ class ScheduledTransactionService:
 
             # Get account, category, payee, and tag info based on entity type
             account_id = str(record.get("ZACCOUNT1", ""))
+            recipient = record.get("ZRECIPIENTACCOUNT")
+            recipient_account_id = (
+                str(recipient)
+                if entity_role == ScheduledEntityRole.TRANSFER and recipient
+                else None
+            )
             category_info = await self._get_category_info_for_scheduled(record)
             tags = await self._get_tags_for_scheduled(record)
             payee: str | None
@@ -286,6 +298,7 @@ class ScheduledTransactionService:
                 amount=Decimal(str(amount)),
                 currency=record.get("ZCURRENCYNAME3", "USD"),
                 account_id=account_id,
+                recipient_account_id=recipient_account_id,
                 category=category_info["category"] or "Uncategorized",
                 category_id=category_info["category_id"],
                 parent_category=category_info["parent_category"],
@@ -640,6 +653,36 @@ class ScheduledTransactionService:
 
         return f"Payee_{payee_id}"
 
+    async def _get_account_kinds(self) -> dict[str, AccountKind]:
+        """Account Z_PK (as str) -> kind, from each account's entity type."""
+        entity_map = await self.db_manager.get_entity_name_map()
+        kind_by_ent = {
+            entity_map[name]: kind
+            for name, kind in ACCOUNT_KIND_BY_ENTITY.items()
+            if name in entity_map
+        }
+        if not kind_by_ent:
+            return {}
+        placeholders = ",".join("?" for _ in kind_by_ent)
+        rows = await self.db_manager.execute_query(
+            f"SELECT Z_PK, Z_ENT FROM ZSYNCOBJECT WHERE Z_ENT IN ({placeholders})",  # nosec B608 - placeholders only
+            tuple(kind_by_ent),
+        )
+        return {str(row["Z_PK"]): kind_by_ent[row["Z_ENT"]] for row in rows}
+
+    @staticmethod
+    def _transfer_kind(
+        transfer: ScheduledTransactionModel,
+        account_kinds: dict[str, AccountKind],
+    ) -> TransferKind:
+        """Kind of a scheduled transfer from its accounts' MoneyWiz types."""
+        source, destination = transfer.account_id, transfer.recipient_account_id
+        if transfer.transaction_type == TransactionType.TRANSFER_IN:
+            source, destination = destination, source
+        return classify_transfer(
+            account_kinds.get(source or ""), account_kinds.get(destination or "")
+        )
+
     async def calculate_salary_breakdown(
         self,
         next_salary_date: datetime,
@@ -649,6 +692,7 @@ class ScheduledTransactionService:
         salary_frequency: str | None = None,
         display_currency: str | None = None,
         exchange_rates: dict[str, float] | None = None,
+        count_savings_as_commitments: bool = True,
     ) -> dict[str, Any]:
         """
         Compare income with outgoing commitments over a planning period.
@@ -661,10 +705,14 @@ class ScheduledTransactionService:
         salary_currency only; its payments are counted from salary_frequency,
         else from the scheduled deposit in that currency, else monthly.
 
-        Commitments are scheduled withdrawals. Scheduled transfers between
-        the user's own accounts (credit card payments, savings moves) are
-        money allocations, not expenses, so they are reported separately and
-        excluded from coverage.
+        Commitments are scheduled withdrawals plus the scheduled transfers
+        that are obligations, classified from MoneyWiz account types (see
+        services/account_kinds.py): bank -> Loan payments, and bank ->
+        Investment contributions unless count_savings_as_commitments is
+        False. Credit card payments, internal moves and transfers out of a
+        card or loan don't count (the card's expenses are already the
+        scheduled withdrawals charged to it); every transfer is still
+        reported by kind.
 
         Amounts stay in their native currency; combined totals are also
         given in display_currency using MoneyWiz's latest exchange rates,
@@ -798,7 +846,30 @@ class ScheduledTransactionService:
         ending_soon_commitments: list[CommitmentBreakdown] = []
         commitments_by_currency: dict[str, Decimal] = {}
 
-        for t in withdrawals:
+        account_kinds = await self._get_account_kinds() if transfers else {}
+        transfers_by_kind: dict[str, dict[str, Decimal]] = {}
+        unclassified: list[str] = []
+        counted: list[tuple[ScheduledTransactionModel, str]] = [
+            (t, "expense") for t in withdrawals
+        ]
+        for t in transfers:
+            dates = in_period(t)
+            if not dates:
+                continue
+            kind = self._transfer_kind(t, account_kinds)
+            bucket = transfers_by_kind.setdefault(kind.value, {})
+            bucket[t.currency] = bucket.get(t.currency, Decimal("0")) + abs(
+                t.amount
+            ) * len(dates)
+            if kind is TransferKind.UNCLASSIFIED:
+                unclassified.append(t.description)
+            elif kind is TransferKind.DEBT_PAYMENT or (
+                kind is TransferKind.SAVINGS and count_savings_as_commitments
+            ):
+                counted.append((t, kind.value))
+
+        commitments_by_kind: dict[str, dict[str, Decimal]] = {}
+        for t, commitment_kind in counted:
             dates = in_period(t)
             if not dates:
                 continue
@@ -816,7 +887,10 @@ class ScheduledTransactionService:
                 total_impact_in_period=total_impact,
                 commitment_type=t.commitment_type,
                 urgency_level=t.urgency_level,
+                kind=commitment_kind,
             )
+            by_kind = commitments_by_kind.setdefault(commitment_kind, {})
+            by_kind[t.currency] = by_kind.get(t.currency, Decimal("0")) + total_impact
             if t.commitment_type == "ending_soon":
                 ending_soon_commitments.append(commitment)
             elif t.commitment_type == "finite":
@@ -826,16 +900,6 @@ class ScheduledTransactionService:
             commitments_by_currency[t.currency] = (
                 commitments_by_currency.get(t.currency, Decimal("0")) + total_impact
             )
-
-        transfers_by_currency: dict[str, Decimal] = {}
-        for t in transfers:
-            if t.transaction_type != TransactionType.TRANSFER_OUT:
-                continue
-            dates = in_period(t)
-            if dates:
-                transfers_by_currency[t.currency] = transfers_by_currency.get(
-                    t.currency, Decimal("0")
-                ) + abs(t.amount) * len(dates)
 
         currencies = sorted(set(income_by_currency) | set(commitments_by_currency))
         remaining_by_currency = {
@@ -899,6 +963,7 @@ class ScheduledTransactionService:
             finite_commitments,
             has_income=bool(income_sources),
             without_rate=without_rate,
+            unclassified=unclassified,
         )
         commitment_end_analysis = self._analyze_commitment_endings(
             finite_commitments + ending_soon_commitments
@@ -919,7 +984,13 @@ class ScheduledTransactionService:
             "recommendations": recommendations,
             "income_in_period": CurrencyAmounts(income_by_currency),
             "income_sources": income_sources,
-            "scheduled_transfers_in_period": CurrencyAmounts(transfers_by_currency),
+            "commitments_by_kind": {
+                k: CurrencyAmounts(v) for k, v in commitments_by_kind.items()
+            },
+            "transfers_in_period": {
+                k: CurrencyAmounts(v) for k, v in transfers_by_kind.items()
+            },
+            "unclassified_transfers": unclassified,
             "display_currency": display,
             "totals_in_display_currency": totals,
             "exchange_rates_used": rates_used,
@@ -952,6 +1023,7 @@ class ScheduledTransactionService:
         finite: list[CommitmentBreakdown],
         has_income: bool = True,
         without_rate: list[str] | None = None,
+        unclassified: list[str] | None = None,
     ) -> list[str]:
         """Generate salary recommendations; amounts are kept per currency."""
         recommendations = []
@@ -976,6 +1048,14 @@ class ScheduledTransactionService:
                 f"📌 No exchange rate for {', '.join(without_rate)}; those "
                 "amounts are excluded from the combined totals. Pass "
                 "exchange_rates to include them."
+            )
+
+        if unclassified:
+            recommendations.append(
+                f"📌 {len(unclassified)} scheduled transfers connect account "
+                "types that fit no rule and are left out of commitments: "
+                f"{', '.join(sorted(set(unclassified)))}. Check those account "
+                "types in MoneyWiz."
             )
 
         if ending_soon:

@@ -5,6 +5,10 @@ account's currency per 1 unit of the user's base currency (base-currency
 transactions have rate 1). The latest rate per currency is the rate MoneyWiz
 itself is using, so it is the default; callers can override any rate.
 
+Only deposits, withdrawals and refunds are read: a transfer's rate is
+between its two accounts (a CRC -> CRC transfer has rate 1), not against the
+base currency.
+
 Native amounts are always kept: conversion only adds a combined total.
 """
 
@@ -21,6 +25,13 @@ logger = logging.getLogger(__name__)
 
 SOURCE_MONEYWIZ = "moneywiz"
 SOURCE_PROVIDED = "provided"
+
+# Transaction entities whose ZCURRENCYEXCHANGERATE is against the base currency.
+BASE_RATE_ENTITY_NAMES = (
+    "DepositTransaction",
+    "WithdrawTransaction",
+    "RefundTransaction",
+)
 
 
 @dataclass(frozen=True)
@@ -104,10 +115,12 @@ class ExchangeRateService:
         """
         entity_map = await self.db_manager.get_entity_name_map()
         account_ids = [entity_map[n] for n in ACCOUNT_ENTITY_NAMES if n in entity_map]
-        if not account_ids:
+        tx_ids = [entity_map[n] for n in BASE_RATE_ENTITY_NAMES if n in entity_map]
+        if not account_ids or not tx_ids:
             return ExchangeRates(anchor=None)
 
         placeholders = ",".join("?" for _ in account_ids)
+        tx_placeholders = ",".join("?" for _ in tx_ids)
         # Latest transaction per account currency that carries a rate. SQLite
         # returns the bare columns from the row holding MAX(t.ZDATE1).
         query = f"""
@@ -117,6 +130,7 @@ class ExchangeRateService:
             FROM ZSYNCOBJECT t
             JOIN ZSYNCOBJECT a ON a.Z_PK = t.ZACCOUNT2
             WHERE a.Z_ENT IN ({placeholders})
+              AND t.Z_ENT IN ({tx_placeholders})
               AND a.ZCURRENCYNAME IS NOT NULL
               AND t.ZCURRENCYEXCHANGERATE > 0
               AND (t.ZORIGINALCURRENCY IS NULL
@@ -125,7 +139,7 @@ class ExchangeRateService:
             GROUP BY a.ZCURRENCYNAME
         """  # nosec B608 - placeholders only, values are bound
         try:
-            rows = await self.db_manager.execute_query(query, tuple(account_ids))
+            rows = await self.db_manager.execute_query(query, (*account_ids, *tx_ids))
         except Exception as e:
             logger.warning(f"Could not read exchange rates: {e}")
             return ExchangeRates(anchor=None)

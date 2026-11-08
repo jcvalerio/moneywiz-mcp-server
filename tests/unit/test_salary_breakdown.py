@@ -15,6 +15,11 @@ from moneywiz_mcp_server.models.scheduled_transaction import (
     ScheduledTransactionModel,
     TransactionType,
 )
+from moneywiz_mcp_server.services.account_kinds import (
+    AccountKind,
+    TransferKind,
+    classify_transfer,
+)
 from moneywiz_mcp_server.services.exchange_rate_service import (
     SOURCE_MONEYWIZ,
     ExchangeRates,
@@ -48,13 +53,16 @@ def schedule(
     pattern: RecurrencePattern = M,
     interval: int = 1,
     first: datetime = START,
+    source: str = "bank",
+    destination: str | None = None,
 ) -> ScheduledTransactionModel:
     return ScheduledTransactionModel(
         id=description,
         description=description,
         amount=Decimal(amount),
         currency=currency,
-        account_id="1",
+        account_id=source,
+        recipient_account_id=destination,
         category="c",
         payee="p",
         transaction_type=kind,
@@ -80,11 +88,23 @@ def transfer(*args, **kwargs):
     return schedule(*args, kind=TransactionType.TRANSFER_OUT, **kwargs)
 
 
+# Test accounts by MoneyWiz type: ids are what schedules reference.
+ACCOUNT_KINDS = {
+    "bank": AccountKind.LIQUID,
+    "savings": AccountKind.LIQUID,
+    "card": AccountKind.CREDIT_CARD,
+    "payable": AccountKind.CREDIT_CARD,
+    "mortgage": AccountKind.LOAN,
+    "pension": AccountKind.INVESTMENT,
+}
+
+
 @pytest.fixture
 def make_service(monkeypatch):
     def _make(schedules, rates=USD_BASE):
         service = ScheduledTransactionService(MagicMock(spec=DatabaseManager))
         service.get_scheduled_transactions = AsyncMock(return_value=schedules)
+        service._get_account_kinds = AsyncMock(return_value=ACCOUNT_KINDS)
         monkeypatch.setattr(
             ExchangeRateService, "get_rates", AsyncMock(return_value=rates)
         )
@@ -229,21 +249,112 @@ class TestCurrencies:
 
 
 class TestTransfers:
-    async def test_transfers_are_allocations_not_commitments(self, make_service):
-        service = make_service(
-            [
-                deposit("Salary", "1000", "USD"),
-                bill("Rent", "-400", "USD"),
-                transfer("Credit card payment", "-900", "USD"),
-                transfer("To savings", "-100", "USD"),
-            ]
+    SCHEDULES = (
+        deposit("Salary", "1000", "USD"),
+        bill("Phone on card", "-400", "USD", source="card"),
+        transfer("Card payment", "-900", "USD", destination="card"),
+        transfer("Mortgage", "-300", "USD", destination="mortgage"),
+        transfer("Pension", "-100", "USD", destination="pension"),
+        transfer("Installment", "-50", "USD", source="card", destination="payable"),
+        transfer("To savings", "-20", "USD", destination="savings"),
+        transfer("Mystery", "-10", "USD", destination="deleted-account"),
+    )
+
+    async def test_transfers_are_classified_by_account_type(self, make_service):
+        result = await breakdown(
+            make_service(list(self.SCHEDULES)), planning_horizon_months=1
         )
-        result = await breakdown(service, planning_horizon_months=1)
-        assert result["total_commitments_in_period"]["USD"] == Decimal("400")
-        assert result["scheduled_transfers_in_period"]["USD"] == Decimal("1000")
-        assert result["coverage_analysis"] == "sufficient"
-        descriptions = {c.description for c in result["infinite_commitments"]}
-        assert descriptions == {"Rent"}
+        # Bills + loan payment + pension contribution; not the card payment.
+        assert result["total_commitments_in_period"]["USD"] == Decimal("800")
+        by_kind = result["commitments_by_kind"]
+        assert by_kind["expense"]["USD"] == Decimal("400")
+        assert by_kind["debt_payment"]["USD"] == Decimal("300")
+        assert by_kind["savings"]["USD"] == Decimal("100")
+        transfers = {k: v["USD"] for k, v in result["transfers_in_period"].items()}
+        assert transfers == {
+            "card_payment": Decimal("900"),
+            "debt_payment": Decimal("300"),
+            "savings": Decimal("100"),
+            "non_cash": Decimal("50"),
+            "internal": Decimal("20"),
+            "unclassified": Decimal("10"),
+        }
+        assert result["unclassified_transfers"] == ["Mystery"]
+        assert any("Mystery" in r for r in result["recommendations"])
+        kinds = {c.description: c.kind for c in result["infinite_commitments"]}
+        assert kinds == {
+            "Phone on card": "expense",
+            "Mortgage": "debt_payment",
+            "Pension": "savings",
+        }
+
+    async def test_savings_can_be_left_out_of_commitments(self, make_service):
+        result = await breakdown(
+            make_service(list(self.SCHEDULES)),
+            planning_horizon_months=1,
+            count_savings_as_commitments=False,
+        )
+        assert result["total_commitments_in_period"]["USD"] == Decimal("700")
+        assert "savings" not in result["commitments_by_kind"]
+        assert result["transfers_in_period"]["savings"]["USD"] == Decimal("100")
+
+    @pytest.mark.parametrize(
+        ("source", "destination", "expected"),
+        [
+            (AccountKind.LIQUID, AccountKind.LOAN, TransferKind.DEBT_PAYMENT),
+            (AccountKind.LIQUID, AccountKind.CREDIT_CARD, TransferKind.CARD_PAYMENT),
+            (AccountKind.LIQUID, AccountKind.INVESTMENT, TransferKind.SAVINGS),
+            (AccountKind.LIQUID, AccountKind.LIQUID, TransferKind.INTERNAL),
+            (AccountKind.INVESTMENT, AccountKind.LIQUID, TransferKind.INTERNAL),
+            (AccountKind.INVESTMENT, AccountKind.INVESTMENT, TransferKind.INTERNAL),
+            (AccountKind.CREDIT_CARD, AccountKind.LIQUID, TransferKind.NON_CASH),
+            (AccountKind.CREDIT_CARD, AccountKind.CREDIT_CARD, TransferKind.NON_CASH),
+            (AccountKind.LOAN, AccountKind.LIQUID, TransferKind.NON_CASH),
+            (AccountKind.INVESTMENT, AccountKind.LOAN, TransferKind.UNCLASSIFIED),
+            (None, AccountKind.LOAN, TransferKind.UNCLASSIFIED),
+            (AccountKind.LIQUID, None, TransferKind.UNCLASSIFIED),
+        ],
+    )
+    def test_classification_rules(self, source, destination, expected):
+        assert classify_transfer(source, destination) is expected
+
+    def test_incoming_transfer_is_read_in_reverse(self):
+        incoming = schedule(
+            "Refund to bank",
+            "50",
+            "USD",
+            kind=TransactionType.TRANSFER_IN,
+            source="bank",
+            destination="mortgage",
+        )
+        # Money flows mortgage -> bank: out of a loan, so not a payment.
+        assert (
+            ScheduledTransactionService._transfer_kind(incoming, ACCOUNT_KINDS)
+            is TransferKind.NON_CASH
+        )
+
+    async def test_account_kinds_come_from_entity_types_against_sqlite(self, tmp_path):
+        path = tmp_path / "moneywiz.sqlite"
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER, Z_NAME VARCHAR)")
+        conn.executemany(
+            "INSERT INTO Z_PRIMARYKEY VALUES (?, ?)",
+            [(10, "BankChequeAccount"), (16, "LoanAccount"), (99, "Category")],
+        )
+        conn.execute("CREATE TABLE ZSYNCOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INT)")
+        conn.executemany(
+            "INSERT INTO ZSYNCOBJECT VALUES (?, ?)", [(1, 10), (2, 16), (3, 99)]
+        )
+        conn.commit()
+        conn.close()
+
+        db = DatabaseManager(str(path), read_only=True)
+        await db.initialize()
+        try:
+            kinds = await ScheduledTransactionService(db)._get_account_kinds()
+        finally:
+            await db.close()
+        assert kinds == {"1": AccountKind.LIQUID, "2": AccountKind.LOAN}
 
     @pytest.mark.parametrize(
         ("amount", "expected"),
@@ -300,7 +411,12 @@ class TestExchangeRateService:
         conn.execute("CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER, Z_NAME VARCHAR)")
         conn.executemany(
             "INSERT INTO Z_PRIMARYKEY VALUES (?, ?)",
-            [(10, "BankChequeAccount"), (11, "InvestmentAccount")],
+            [
+                (10, "BankChequeAccount"),
+                (11, "InvestmentAccount"),
+                (20, "WithdrawTransaction"),
+                (21, "TransferWithdrawTransaction"),
+            ],
         )
         conn.execute(
             """CREATE TABLE ZSYNCOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER,
@@ -313,11 +429,13 @@ class TestExchangeRateService:
                 (1, 10, "USD", None, None, None, None),
                 (2, 10, "CRC", None, None, None, None),
                 (3, 11, "USD", None, None, None, None),
-                (100, 99, None, 1, 1.0, "USD", 1000.0),
-                (101, 99, None, 2, 520.0, "CRC", 1000.0),
-                (102, 99, None, 2, 505.0, "CRC", 2000.0),  # latest CRC
+                (100, 20, None, 1, 1.0, "USD", 1000.0),
+                (101, 20, None, 2, 520.0, "CRC", 1000.0),
+                (102, 20, None, 2, 505.0, "CRC", 2000.0),  # latest CRC
                 # Crypto bought in a USD account: not a USD rate.
-                (103, 99, None, 3, 0.998, "BTC", 3000.0),
+                (103, 20, None, 3, 0.998, "BTC", 3000.0),
+                # A CRC -> CRC transfer carries rate 1 between its accounts.
+                (104, 21, None, 2, 1.0, "CRC", 4000.0),
             ],
         )
         conn.commit()

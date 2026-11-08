@@ -46,6 +46,9 @@ class ScheduledTransactionModel(BaseModel):
     amount: Decimal = Field(..., description="Transaction amount")
     currency: str = Field(..., description="Transaction currency")
     account_id: str = Field(..., description="Associated account ID")
+    recipient_account_id: str | None = Field(
+        None, description="Destination account ID (transfers only)"
+    )
     category: str = Field(..., description="Transaction leaf category")
     category_id: int | None = Field(None, description="Transaction category ID")
     parent_category: str | None = Field(None, description="Immediate parent category")
@@ -174,6 +177,11 @@ class CommitmentBreakdown(BaseModel):
     # Status indicators
     commitment_type: str = Field(..., description="Type: finite, infinite, ending_soon")
     urgency_level: str = Field(..., description="Urgency: immediate, regular, ending")
+    kind: str = Field(
+        "expense",
+        description="expense (scheduled withdrawal), debt_payment (bank -> Loan "
+        "account) or savings (bank -> Investment account)",
+    )
 
 
 class IncomeSource(BaseModel):
@@ -326,11 +334,22 @@ class SalaryBreakdownResponse(BaseCurrencyResponse):
     income_sources: list[IncomeSource] = Field(
         default_factory=list, description="Income streams counted in the period"
     )
-    scheduled_transfers_in_period: CurrencyAmounts = Field(
-        default_factory=CurrencyAmounts,
-        description="Scheduled transfers between own accounts (e.g. credit card "
-        "payments, savings moves). Money allocations, not expenses: excluded "
-        "from commitments and coverage.",
+    commitments_by_kind: dict[str, CurrencyAmounts] = Field(
+        default_factory=dict,
+        description="Commitments in the period split into expense, debt_payment "
+        "and savings, by currency",
+    )
+    transfers_in_period: dict[str, CurrencyAmounts] = Field(
+        default_factory=dict,
+        description="Every scheduled transfer in the period by kind, classified "
+        "from the MoneyWiz account types: debt_payment and savings count as "
+        "commitments; card_payment (pays expenses already recorded on the card), "
+        "internal, non_cash and unclassified do not",
+    )
+    unclassified_transfers: list[str] = Field(
+        default_factory=list,
+        description="Transfers whose account types fit no rule; check those "
+        "account types in MoneyWiz",
     )
     display_currency: str | None = Field(
         None, description="Currency the combined totals are expressed in"

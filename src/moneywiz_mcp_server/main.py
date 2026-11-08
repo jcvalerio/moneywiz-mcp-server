@@ -799,6 +799,7 @@ async def analyze_salary_breakdown(
     salary_frequency: str | None = None,
     display_currency: str | None = None,
     exchange_rates: dict[str, float] | None = None,
+    count_savings_as_commitments: bool = True,
 ) -> SalaryBreakdownResponse:
     """
     Analyze whether income covers scheduled commitments over a planning period.
@@ -806,9 +807,12 @@ async def analyze_salary_breakdown(
     Income is detected from scheduled deposits in every currency (e.g. a USD
     salary plus CRC income). Amounts are reported in their own currency and
     also combined in one display currency using MoneyWiz's latest exchange
-    rates. Scheduled transfers between your own accounts (credit card
-    payments, savings moves) are money allocations, not expenses: they are
-    listed separately and excluded from coverage.
+    rates. Commitments are scheduled withdrawals plus scheduled transfers
+    that are obligations, classified from the MoneyWiz account types: bank ->
+    Loan (debt payments) and bank -> Investment (savings). Credit card
+    payments are not counted (the expenses charged to the card are), nor
+    are internal moves or transfers out of a card or loan. Every transfer is
+    reported by kind; ones whose account types fit no rule are listed.
 
     Args:
         next_salary_date: Start of the period, usually the next payday (YYYY-MM-DD)
@@ -824,6 +828,8 @@ async def analyze_salary_breakdown(
             Defaults to salary_currency, else the MoneyWiz base currency
         exchange_rates: Optional rate overrides as units of each currency per
             1 display_currency, e.g. {"CRC": 505} with display_currency USD
+        count_savings_as_commitments: Count bank -> Investment transfers
+            (e.g. retirement contributions) as commitments (default true)
 
     Returns:
         Income and commitments per currency, combined totals with the
@@ -851,6 +857,7 @@ async def analyze_salary_breakdown(
                 salary_frequency=salary_frequency,
                 display_currency=display_currency,
                 exchange_rates=exchange_rates,
+                count_savings_as_commitments=count_savings_as_commitments,
             )
 
             return SalaryBreakdownResponse(**breakdown_data)
