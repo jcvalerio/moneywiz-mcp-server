@@ -59,7 +59,26 @@ class AccountResponse(BaseModel):
     id: str = Field(..., description="Unique account identifier")
     name: str = Field(..., description="Account name")
     type: str = Field(..., description="Account type (checking, savings, etc.)")
-    balance: float = Field(..., description="Current account balance")
+    balance: float = Field(
+        ...,
+        description="Current account balance: cash plus the market value of "
+        "holdings (investment and crypto accounts)",
+    )
+    cash_balance: float | None = Field(
+        None,
+        description="Cash part of the balance: opening balance plus every "
+        "transaction. Negative in an investment account that bought assets",
+    )
+    holdings_value: float = Field(
+        0.0,
+        description="Shares or coins held, valued at MoneyWiz's latest price per "
+        "share, in the account currency",
+    )
+    holdings_without_price: int = Field(
+        0,
+        description="Holdings with shares but no price in MoneyWiz, valued at 0; "
+        "set a price in MoneyWiz to include them",
+    )
     currency: str = Field(..., description="Account currency code")
     entity_type: str = Field(..., description="MoneyWiz entity type")
     last_updated: str = Field(..., description="Last update timestamp")

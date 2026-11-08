@@ -4,12 +4,21 @@ import logging
 from typing import Any
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.services.holdings_service import HoldingsValuer
 from moneywiz_mcp_server.services.transaction_service import (
     ACCOUNT_ENTITY_NAMES,
     TRANSACTION_TYPE_ENTITY_NAMES,
 )
+from moneywiz_mcp_server.utils.core_data_time import core_data_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _iso_date(timestamp: object) -> str:
+    """Core Data timestamp as an ISO date-time string ("" if missing)."""
+    if isinstance(timestamp, (int, float)):
+        return core_data_timestamp_to_datetime(timestamp).isoformat()
+    return ""
 
 
 class AccountService:
@@ -51,6 +60,10 @@ class AccountService:
                 "account balances will only reflect the opening balance"
             )
 
+        # Investment and Forex accounts also hold shares or coins, valued at
+        # their latest price; their balance is cash plus holdings.
+        valuations = await HoldingsValuer(self.db_manager).value_accounts()
+
         accounts_data = []
         for entity_id in account_entities:
             query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ?"
@@ -91,7 +104,14 @@ class AccountService:
                     if balance_result and balance_result[0]["total"]
                     else 0
                 )
-                current_balance = opening_balance + transaction_total
+                cash_balance = opening_balance + transaction_total
+                held = valuations.get(account["Z_PK"])
+                if held is not None and held.cash is not None:
+                    # Forex: what's held in the account currency, not the
+                    # sum of every currency's historical value.
+                    cash_balance = float(held.cash)
+                holdings_value = float(held.holdings_value) if held else 0.0
+                current_balance = cash_balance + holdings_value
 
                 accounts_data.append(
                     {
@@ -99,13 +119,18 @@ class AccountService:
                         "name": account.get("ZNAME", "Unknown Account"),
                         "type": mapped_type,
                         "balance": current_balance,
+                        "cash_balance": cash_balance,
+                        "holdings_value": holdings_value,
+                        "holdings_without_price": held.without_price if held else 0,
                         "currency": account.get("ZCURRENCYNAME", "USD"),
                         "entity_type": entity_name,
                         "last_updated": str(account.get("ZOBJECTCREATIONDATE", "")),
                         "archived": bool(account.get("ZARCHIVED", 0)),
                         "institution": account.get("ZINSTITUTIONNAME", ""),
                         "account_number": account.get("ZLASTFOURDIGITS", ""),
-                        "created_date": account.get("ZOBJECTCREATIONDATE", ""),
+                        "last_four_digits": account.get("ZLASTFOURDIGITS") or "",
+                        "account_info": account.get("ZINFO") or "",
+                        "created_date": _iso_date(account.get("ZOBJECTCREATIONDATE")),
                     }
                 )
 

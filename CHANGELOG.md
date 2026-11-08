@@ -26,6 +26,8 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ### Fixed
 
+- Investment and Forex (crypto) account balances now include what the accounts hold. Investment accounts add their shares at the latest price to their cash. Forex accounts are valued by the quantity held in each currency, not by the sum of past transaction values, which mixed historical prices and was often negative. Accounts report `cash_balance`, `holdings_value` and `holdings_without_price`, and `balance` is their total.
+- `get_account` failed on every account: its response was missing `account_info` and `last_four_digits`, and `created_date` was a raw timestamp. It now returns them, with `created_date` as an ISO date.
 - `analyze_salary_breakdown` counts every paycheck in the period (a biweekly salary over 3 months is 7 payments, not 1) and income in every currency.
 - Amounts in different currencies are no longer compared or summed as if they were the same currency. They are kept per currency and combined using MoneyWiz's latest exchange rates.
 - Scheduled transfers are classified from the MoneyWiz types of their accounts. Loan payments and savings contributions count as commitments. Credit card payments, internal moves, and transfers out of a card or loan don't.
