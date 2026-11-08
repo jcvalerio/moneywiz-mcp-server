@@ -76,8 +76,14 @@ class AccountResponse(BaseModel):
     )
     holdings_without_price: int = Field(
         0,
-        description="Holdings with shares but no price in MoneyWiz, valued at 0; "
-        "set a price in MoneyWiz to include them",
+        description="Positions valued at 0 because MoneyWiz has no price for "
+        "them: a holding without a price, or a currency held in a forex account "
+        "with no holding for it. Add the price or holding in MoneyWiz",
+    )
+    holdings_valued: bool = Field(
+        True,
+        description="False when holdings couldn't be read: an investment or "
+        "forex account's balance is then only the sum of its transactions",
     )
     currency: str = Field(..., description="Account currency code")
     entity_type: str = Field(..., description="MoneyWiz entity type")

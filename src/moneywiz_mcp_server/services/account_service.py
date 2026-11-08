@@ -63,6 +63,8 @@ class AccountService:
         # Investment and Forex accounts also hold shares or coins, valued at
         # their latest price; their balance is cash plus holdings.
         valuations = await HoldingsValuer(self.db_manager).value_accounts()
+        holdings_valued = valuations is not None
+        valuations = valuations or {}
 
         accounts_data = []
         for entity_id in account_entities:
@@ -122,9 +124,11 @@ class AccountService:
                         "cash_balance": cash_balance,
                         "holdings_value": holdings_value,
                         "holdings_without_price": held.without_price if held else 0,
+                        "holdings_valued": holdings_valued
+                        or entity_name not in ("InvestmentAccount", "ForexAccount"),
                         "currency": account.get("ZCURRENCYNAME", "USD"),
                         "entity_type": entity_name,
-                        "last_updated": str(account.get("ZOBJECTCREATIONDATE", "")),
+                        "last_updated": _iso_date(account.get("ZOBJECTCREATIONDATE")),
                         "archived": bool(account.get("ZARCHIVED", 0)),
                         "institution": account.get("ZINSTITUTIONNAME", ""),
                         "account_number": account.get("ZLASTFOURDIGITS", ""),

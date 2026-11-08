@@ -42,7 +42,6 @@ class AccountValuation:
 
     cash: Decimal | None  # Forex: the account currency held; None = use the sum
     holdings_value: Decimal
-    holdings: int  # positions other than cash
     without_price: int  # positions with no price (valued at 0)
 
 
@@ -56,8 +55,8 @@ class HoldingsValuer:
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
 
-    async def value_accounts(self) -> dict[int, AccountValuation]:
-        """Valuation per account Z_PK. Empty if holdings can't be read."""
+    async def value_accounts(self) -> dict[int, AccountValuation] | None:
+        """Valuation per account Z_PK, or None if holdings can't be read."""
         entity_map = await self.db_manager.get_entity_name_map()
         try:
             holdings = await self._holdings(entity_map)
@@ -65,9 +64,12 @@ class HoldingsValuer:
             out = await self._investment_accounts(entity_map, holdings, exchange_moves)
             out.update(await self._forex_accounts(entity_map, holdings, exchange_moves))
             return out
-        except Exception as e:
-            logger.warning(f"Could not value investment holdings: {e}")
-            return {}
+        except Exception:
+            logger.exception(
+                "Could not value investment holdings; investment and forex "
+                "balances fall back to the sum of their transactions"
+            )
+            return None
 
     async def _holdings(self, entity_map: dict[str, int]) -> list[dict[str, Any]]:
         ent = entity_map.get("InvestmentHolding")
@@ -185,10 +187,13 @@ class HoldingsValuer:
             if currency == base or row["ZORIGINALAMOUNT"] is None:
                 quantity = amount
             else:
-                # ZORIGINALAMOUNT's sign isn't reliable on every transaction
-                # type; the direction is the sign of the account amount.
-                quantity = abs(_dec(row["ZORIGINALAMOUNT"]))
-                if amount < 0:
+                # ZORIGINALAMOUNT's sign isn't consistent across transaction
+                # types (MoneyWiz 3 stores some incoming transfers with a
+                # negative original amount), so the direction is the sign of
+                # the account amount; with no amount, the original's sign.
+                original = _dec(row["ZORIGINALAMOUNT"])
+                quantity = abs(original)
+                if amount < 0 or (amount == 0 and original < 0):
                     quantity = -quantity
             bucket = quantities[pk]
             bucket[currency] = bucket.get(currency, ZERO) + quantity
@@ -219,13 +224,12 @@ class HoldingsValuer:
         cash: Decimal | None, items: list[tuple[Decimal, object]]
     ) -> AccountValuation:
         value = ZERO
-        held = unpriced = 0
+        unpriced = 0
         for quantity, price in items:
             if abs(quantity) < MIN_QUANTITY:
                 continue
-            held += 1
             if price:
                 value += quantity * _dec(price)
             else:
                 unpriced += 1
-        return AccountValuation(cash, value, held, unpriced)
+        return AccountValuation(cash, value, unpriced)
