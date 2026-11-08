@@ -426,7 +426,8 @@ class TestLoanPaymentSplit:
         )
 
     async def test_splits_by_the_plans_principal_category(self, make_service):
-        result = await self.breakdown(make_service, loan_payment(), plans())
+        items = {(2027, 1): PlanItem(principal=Decimal("600"), interest=Decimal("270"))}
+        result = await self.breakdown(make_service, loan_payment(), plans(items))
         assert result["total_commitments_in_period"]["USD"] == Decimal("900")
         by_kind = {k: v["USD"] for k, v in result["commitments_by_kind"].items()}
         assert by_kind == {
@@ -505,6 +506,36 @@ class TestLoanPaymentSplit:
             Decimal("250"),
         )
 
+    async def test_month_without_a_plan_item_uses_the_schedule_split(
+        self, make_service
+    ):
+        result = await self.breakdown(make_service, loan_payment(), plans())
+        [c] = result["infinite_commitments"]
+        assert (c.principal_in_period, c.cost_in_period) == (
+            Decimal("600"),
+            Decimal("300"),
+        )
+        [note] = result["loan_payment_notes"]
+        assert "no single payment for 2027-01" in note
+
+    async def test_plan_in_another_currency_is_not_used(self, make_service):
+        plan_set = plans()
+        plan_set.by_id[10].currency = "CRC"
+        result = await self.breakdown(make_service, loan_payment(), plan_set)
+        assert result["commitments_by_kind"]["debt_payment"]["USD"] == Decimal("900")
+        [note] = result["loan_payment_notes"]
+        assert "plan is in CRC but the payment is in USD" in note
+
+    def test_month_with_several_plan_items_has_no_item(self):
+        plan = LoanPlan(PRINCIPAL, INTEREST)
+        plan.add_item(datetime(2027, 1, 5), PlanItem(Decimal("1"), Decimal("2")))
+        plan.add_item(datetime(2027, 1, 20), PlanItem(Decimal("3"), Decimal("4")))
+        plan.add_item(datetime(2027, 2, 5), PlanItem(Decimal("5"), Decimal("6")))
+        assert plan.item_for(datetime(2027, 1, 5)) is None
+        assert plan.item_for(datetime(2027, 2, 5)) == PlanItem(
+            Decimal("5"), Decimal("6")
+        )
+
     async def test_plans_load_from_sqlite(self, tmp_path):
         path = tmp_path / "moneywiz.sqlite"
         conn = sqlite3.connect(path)
@@ -517,14 +548,15 @@ class TestLoanPaymentSplit:
             """CREATE TABLE ZSYNCOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER,
                ZLOANACCOUNT INTEGER, ZCATEGORYPRINCIPAL INTEGER,
                ZCATEGORYINTEREST INTEGER, ZPAYMENTPLAN1 INTEGER, ZDATE REAL,
-               ZPRINCIPALAMOUNT1 REAL, ZINTERESTAMOUNT REAL)"""
+               ZPRINCIPALAMOUNT1 REAL, ZINTERESTAMOUNT REAL,
+               ZCURRENCYNAME2 VARCHAR)"""
         )
         when = datetime_to_core_data_timestamp(datetime(2027, 1, 11, 12))
         conn.executemany(
-            "INSERT INTO ZSYNCOBJECT VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO ZSYNCOBJECT VALUES (?,?,?,?,?,?,?,?,?,?)",
             [
-                (10, 60, 500, 87, 91, None, None, None, None),
-                (11, 61, None, None, None, 10, when, 571.27, 272.86),
+                (10, 60, 500, 87, 91, None, None, None, None, None),
+                (11, 61, None, None, None, 10, when, 571.27, 272.86, "USD"),
             ],
         )
         conn.commit()
@@ -539,6 +571,7 @@ class TestLoanPaymentSplit:
         plan = loaded.for_payment(None, "500")
         assert plan is loaded.by_id[10]
         assert (plan.principal_category, plan.interest_category) == (87, 91)
+        assert plan.currency == "USD"
         assert plan.item_for(datetime(2027, 1, 30)) == PlanItem(
             Decimal("571.27"), Decimal("272.86")
         )

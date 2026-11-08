@@ -42,9 +42,20 @@ class LoanPlan:
     principal_category: int | None
     interest_category: int | None
     items: dict[tuple[int, int], PlanItem] = field(default_factory=dict)
+    currency: str | None = None  # the plan items' currency, when stored
+    # Months with more than one plan item: which one a payment is can't be
+    # told, so those months have no item.
+    ambiguous_months: set[tuple[int, int]] = field(default_factory=set)
 
     def item_for(self, when: datetime) -> PlanItem | None:
-        return self.items.get((when.year, when.month))
+        key = (when.year, when.month)
+        return None if key in self.ambiguous_months else self.items.get(key)
+
+    def add_item(self, when: datetime, item: PlanItem) -> None:
+        key = (when.year, when.month)
+        if key in self.items:
+            self.ambiguous_months.add(key)
+        self.items[key] = item
 
 
 @dataclass
@@ -140,7 +151,8 @@ async def load_loan_plans(db_manager: DatabaseManager) -> LoanPlans:
             (plan_ent,),
         )
         item_rows = await db_manager.execute_query(
-            "SELECT ZPAYMENTPLAN1, ZDATE, ZPRINCIPALAMOUNT1, ZINTERESTAMOUNT "
+            "SELECT ZPAYMENTPLAN1, ZDATE, ZPRINCIPALAMOUNT1, ZINTERESTAMOUNT, "
+            "ZCURRENCYNAME2 "
             "FROM ZSYNCOBJECT WHERE Z_ENT = ? AND ZDATE IS NOT NULL",
             (item_ent,),
         )
@@ -162,8 +174,20 @@ async def load_loan_plans(db_manager: DatabaseManager) -> LoanPlans:
         if plan is None:
             continue
         when = core_data_timestamp_to_datetime(row["ZDATE"])
-        plan.items[(when.year, when.month)] = PlanItem(
-            principal=Decimal(str(row.get("ZPRINCIPALAMOUNT1") or 0)),
-            interest=Decimal(str(row.get("ZINTERESTAMOUNT") or 0)),
+        plan.add_item(
+            when,
+            PlanItem(
+                principal=Decimal(str(row.get("ZPRINCIPALAMOUNT1") or 0)),
+                interest=Decimal(str(row.get("ZINTERESTAMOUNT") or 0)),
+            ),
         )
+        if row.get("ZCURRENCYNAME2"):
+            plan.currency = row["ZCURRENCYNAME2"]
+    for pk, plan in plans.by_id.items():
+        if plan.ambiguous_months:
+            logger.warning(
+                f"Payment plan {pk} has several items in "
+                f"{len(plan.ambiguous_months)} month(s); those months use the "
+                "schedule's split"
+            )
     return plans

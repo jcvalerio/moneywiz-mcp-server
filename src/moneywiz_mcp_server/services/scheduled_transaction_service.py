@@ -1172,8 +1172,17 @@ class ScheduledTransactionService:
             if t.recipient_account_name
             else t.description
         )
+        currency_mismatch = (
+            plan is not None
+            and plan.currency is not None
+            and plan.currency != t.currency
+        )
+        plan_currency = plan.currency if currency_mismatch else None
+        if currency_mismatch:
+            plan = None
         principal = cost = unsplit = Decimal("0")
         drift_months: list[str] = []
+        months_without_item: list[str] = []
         statuses: set[SplitStatus] = set()
         for when in dates:
             part = split_payment(amount, t.category_splits, plan, when)
@@ -1183,12 +1192,20 @@ class ScheduledTransactionService:
                 continue
             principal += part.principal
             cost += part.cost
+            if part.status is SplitStatus.SPLIT and plan.item_for(when) is None:
+                months_without_item.append(f"{when:%Y-%m}")
             if drift_is_material(part.interest_drift, amount):
                 drift_months.append(
                     f"{when:%Y-%m} ({part.interest_drift:+,.2f} {t.currency})"
                 )
 
-        if plan is None:
+        if currency_mismatch:
+            notes.append(
+                f"{label}: its payment plan is in {plan_currency} but the "
+                f"payment is in {t.currency}, so it can't be split; counted "
+                "in full as debt_payment."
+            )
+        elif plan is None:
             notes.append(
                 f"{label}: no MoneyWiz payment plan, so it can't be split "
                 "into principal and cost; counted in full as debt_payment."
@@ -1204,6 +1221,12 @@ class ScheduledTransactionService:
                 f"{label}: the payment plan has no payment for some "
                 "months and the schedule has no category splits; those months "
                 "count in full as debt_payment."
+            )
+        if months_without_item:
+            notes.append(
+                f"{label}: the payment plan has no single payment for "
+                f"{', '.join(months_without_item)}; the schedule's interest "
+                "split is used for those months."
             )
         if drift_months:
             notes.append(
