@@ -30,6 +30,7 @@ from moneywiz_mcp_server.services.scheduled_transaction_service import (
     ScheduledEntityRole,
     ScheduledTransactionService,
 )
+from moneywiz_mcp_server.utils.core_data_time import datetime_to_core_data_timestamp
 from moneywiz_mcp_server.utils.recurrence import parse_frequency
 
 START = datetime(2027, 1, 1, 12)
@@ -366,6 +367,72 @@ class TestTransfers:
             service._infer_transaction_type(amount, ScheduledEntityRole.TRANSFER)
             == expected
         )
+
+
+class TestScheduleEnds:
+    """One-time schedules and schedules that end are counted only while active."""
+
+    def end_of(self, record, first=START):
+        return ScheduledTransactionService._end_of_schedule(record, first, M, 1)
+
+    def test_one_time_schedule_runs_once(self):
+        assert self.end_of({"ZISREPEATABLE1": 0}) == (
+            True,
+            RecurrenceEndCondition.AFTER_OCCURRENCES,
+            START,
+            1,
+        )
+
+    def test_repeating_schedule_without_end_is_infinite(self):
+        assert self.end_of({"ZISREPEATABLE1": 1}) == (
+            False,
+            RecurrenceEndCondition.NEVER,
+            None,
+            None,
+        )
+
+    def test_end_date_counts_remaining_payments(self):
+        # Jan 1, Feb 1, Mar 1; the stored end is earlier in the day.
+        end = datetime_to_core_data_timestamp(datetime(2027, 3, 1, 8))
+        one_time, condition, final, remaining = self.end_of(
+            {"ZISREPEATABLE1": 1, "ZLASTEXECUTEDATE": end}
+        )
+        assert (one_time, condition, remaining) == (
+            False,
+            RecurrenceEndCondition.ON_DATE,
+            3,
+        )
+        assert final.date() == datetime(2027, 3, 1).date()
+
+    def test_schedule_past_its_end_has_no_payments_left(self):
+        end = datetime_to_core_data_timestamp(datetime(2026, 12, 1))
+        assert self.end_of({"ZISREPEATABLE1": 1, "ZLASTEXECUTEDATE": end})[3] == 0
+
+    async def test_breakdown_counts_one_time_once_and_stops_at_the_end(
+        self, make_service
+    ):
+        one_time = bill(
+            "Repair", "-150", "USD", first=datetime(2027, 1, 20)
+        ).model_copy(update={"is_one_time": True, "remaining_occurrences": 1})
+        ending = bill("Last installments", "-100", "USD").model_copy(
+            update={
+                "end_condition": RecurrenceEndCondition.ON_DATE,
+                "remaining_occurrences": 2,
+            }
+        )
+        card_payment = transfer(
+            "Statement", "-500", "USD", destination="card"
+        ).model_copy(update={"is_one_time": True, "remaining_occurrences": 1})
+        result = await breakdown(
+            make_service(
+                [deposit("Salary", "1000", "USD"), one_time, ending, card_payment]
+            )
+        )
+        # 150 once + 100 twice; the card payment is reported, not counted.
+        assert result["total_commitments_in_period"]["USD"] == Decimal("350")
+        assert result["transfers_in_period"]["card_payment"]["USD"] == Decimal("500")
+        types = {c.description: c.commitment_type for c in result["finite_commitments"]}
+        assert types["Repair"] == "one_time"
 
 
 class TestCoverage:

@@ -186,6 +186,10 @@ def occurrences_between(
     if end <= start:
         return []
     dates = occurrence_dates(
-        anchor, pattern, interval, until=end, limit=max_occurrences or 10_000
+        anchor,
+        pattern,
+        interval,
+        until=end,
+        limit=10_000 if max_occurrences is None else max_occurrences,
     )
     return [d for d in dates if start <= d < end]

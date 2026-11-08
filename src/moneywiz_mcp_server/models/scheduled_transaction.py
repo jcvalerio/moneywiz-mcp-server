@@ -94,6 +94,9 @@ class ScheduledTransactionModel(BaseModel):
     final_execution_date: datetime | None = Field(
         None, description="Date of final planned execution"
     )
+    is_one_time: bool = Field(
+        default=False, description="Runs once, on next_execution_date"
+    )
 
     # Planning Information
     upcoming_dates: list[datetime] = Field(
@@ -124,6 +127,8 @@ class ScheduledTransactionModel(BaseModel):
     @property
     def commitment_type(self) -> str:
         """Classify commitment type based on occurrence pattern."""
+        if self.is_one_time:
+            return "one_time"
         if self.end_condition == RecurrenceEndCondition.NEVER:
             return "infinite"
         elif self.remaining_occurrences and self.remaining_occurrences <= 3:
@@ -175,7 +180,9 @@ class CommitmentBreakdown(BaseModel):
     )
 
     # Status indicators
-    commitment_type: str = Field(..., description="Type: finite, infinite, ending_soon")
+    commitment_type: str = Field(
+        ..., description="Type: finite, infinite, ending_soon, one_time"
+    )
     urgency_level: str = Field(..., description="Urgency: immediate, regular, ending")
     kind: str = Field(
         "expense",
@@ -269,7 +276,9 @@ class ScheduledTransactionResponse(BaseModel):
     )
 
     is_active: bool = Field(..., description="Whether schedule is active")
-    commitment_type: str = Field(..., description="finite/infinite/ending_soon")
+    commitment_type: str = Field(
+        ..., description="finite/infinite/ending_soon/one_time"
+    )
     urgency_level: str = Field(..., description="immediate/regular/future")
 
 

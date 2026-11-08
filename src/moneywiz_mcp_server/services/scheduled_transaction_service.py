@@ -1,6 +1,6 @@
 """Service for scheduled transaction operations and occurrence tracking."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 import logging
@@ -148,10 +148,10 @@ class ScheduledTransactionService:
             entity_roles = await self._get_scheduled_entity_roles()
 
             for entity_type in entity_roles:
-                # Query for active scheduled transactions
+                # Repeating and one-time (ZISREPEATABLE1 = 0) schedules
                 query = """
                     SELECT * FROM ZSYNCOBJECT
-                    WHERE Z_ENT = ? AND ZISREPEATABLE1 = 1
+                    WHERE Z_ENT = ?
                 """
                 params = [entity_type]
 
@@ -267,21 +267,21 @@ class ScheduledTransactionService:
                 record.get("ZDURATIONUNITS1"), record.get("ZDURATION1")
             )
 
-            # Calculate occurrence data from actual fields
             executes_count = record.get("ZEXECUTESCOUNT", 0)
-            total_occurrences = (
-                None  # MoneyWiz doesn't seem to use fixed total occurrences
+            (
+                is_one_time,
+                end_condition,
+                final_execution_date,
+                remaining_occurrences,
+            ) = self._end_of_schedule(
+                record, next_execution_date, recurrence_pattern, recurrence_interval
             )
-            remaining_occurrences = None
-
-            # Determine end condition - MoneyWiz scheduled transactions seem to run indefinitely
-            end_condition = RecurrenceEndCondition.NEVER
 
             # Generate upcoming dates
             upcoming_dates = await self._generate_upcoming_dates(
                 next_execution_date,
                 recurrence_pattern,
-                None,
+                remaining_occurrences,
                 6,
                 interval=recurrence_interval,
             )
@@ -314,10 +314,11 @@ class ScheduledTransactionService:
                 next_execution_date=next_execution_date,
                 weekend_handling=self._infer_weekend_handling(record),
                 end_condition=end_condition,
-                total_occurrences=total_occurrences,
+                total_occurrences=1 if is_one_time else None,
                 completed_occurrences=executes_count,
                 remaining_occurrences=remaining_occurrences,
-                final_execution_date=None,  # No fixed end date for most MoneyWiz schedules
+                final_execution_date=final_execution_date,
+                is_one_time=is_one_time,
                 upcoming_dates=upcoming_dates,
                 is_active=record.get("ZDISABLEEXECUTION", 0) == 0,
                 created_date=created_date,
@@ -334,6 +335,35 @@ class ScheduledTransactionService:
                 "it is omitted from results"
             )
             return None
+
+    @staticmethod
+    def _end_of_schedule(
+        record: dict[str, Any],
+        next_execution: datetime,
+        pattern: RecurrencePattern,
+        interval: int,
+    ) -> tuple[bool, RecurrenceEndCondition, datetime | None, int | None]:
+        """How a schedule ends: (one-time, end condition, final date, remaining).
+
+        ZISREPEATABLE1 = 0 marks a one-time schedule, which runs once on its
+        next execution date. A repeating schedule that ends ("after N
+        repeats" or "on date") stores its last date in ZLASTEXECUTEDATE.
+        """
+        if record.get("ZISREPEATABLE1") == 0:
+            return True, RecurrenceEndCondition.AFTER_OCCURRENCES, next_execution, 1
+        last = record.get("ZLASTEXECUTEDATE")
+        if last is None:
+            return False, RecurrenceEndCondition.NEVER, None, None
+        final = core_data_timestamp_to_datetime(last)
+        # Compare calendar days: the stored end may differ in time of day.
+        remaining = sum(
+            1
+            for d in occurrence_dates(
+                next_execution, pattern, interval, until=final + timedelta(days=1)
+            )
+            if d.date() <= final.date()
+        )
+        return False, RecurrenceEndCondition.ON_DATE, final, remaining
 
     async def _matches_filters(
         self,
@@ -505,7 +535,7 @@ class ScheduledTransactionService:
     ) -> list[datetime]:
         """Generate upcoming execution dates within the next months_ahead months."""
         limit = 20  # Cap for performance
-        if remaining_occurrences:
+        if remaining_occurrences is not None:
             limit = min(limit, remaining_occurrences)
         return occurrence_dates(
             next_date,
@@ -893,7 +923,7 @@ class ScheduledTransactionService:
             by_kind[t.currency] = by_kind.get(t.currency, Decimal("0")) + total_impact
             if t.commitment_type == "ending_soon":
                 ending_soon_commitments.append(commitment)
-            elif t.commitment_type == "finite":
+            elif t.commitment_type in ("finite", "one_time"):
                 finite_commitments.append(commitment)
             else:
                 infinite_commitments.append(commitment)

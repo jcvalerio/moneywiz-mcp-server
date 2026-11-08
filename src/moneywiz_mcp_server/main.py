@@ -690,7 +690,8 @@ async def get_scheduled_transactions(
         time_period: Time period to analyze (e.g., 'next 6 months', 'next year')
         account_ids: Optional list of account IDs to filter by
         categories: Optional list of category names to filter by
-        commitment_types: Filter by commitment type: finite, infinite, ending_soon
+        commitment_types: Filter by commitment type: finite, infinite,
+            ending_soon, one_time
         include_inactive: Include inactive scheduled transactions
         limit: Maximum number of transactions to return (1-100)
 
@@ -765,6 +766,9 @@ async def get_scheduled_transactions(
                 "finite_commitments": finite_count,
                 "infinite_commitments": infinite_count,
                 "ending_soon_commitments": ending_soon_count,
+                "one_time": sum(
+                    1 for t in scheduled_transactions if t.commitment_type == "one_time"
+                ),
                 "total_active": sum(1 for t in scheduled_transactions if t.is_active),
             }
 

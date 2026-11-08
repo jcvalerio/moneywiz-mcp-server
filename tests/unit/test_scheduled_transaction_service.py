@@ -104,7 +104,7 @@ class TestScheduledTransactionService:
 
         # Mock database responses - service queries for entities 32, 33 and 34
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1 = 1" in query and params[0] == 34:
+            if "WHERE Z_ENT = ?" in query and params[0] == 34:
                 return [sample_database_record]
             elif "ZCATEGORYASSIGMENT" in query:
                 return [{"ZCATEGORY": 99}]

@@ -151,7 +151,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 # Service queries entities 32, 33, 34
                 if entity_type == 32:
@@ -233,7 +233,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -317,7 +317,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -388,7 +388,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query:
                 entity_type = params[0]
                 if entity_type in [32, 33, 34]:
                     return [
@@ -494,7 +494,7 @@ class TestScheduledTransactionsIntegration:
 
         # Set up mock database responses
         def mock_execute_query(query, params=None):
-            if "ZISREPEATABLE1" in query and params[0] == 34:
+            if "WHERE Z_ENT = ?" in query and "SELECT *" in query and params[0] == 34:
                 return [test_record]
             elif params and params[0] == 19:  # Category lookup
                 category_id = params[-1]
