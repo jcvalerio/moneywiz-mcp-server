@@ -187,19 +187,21 @@ class HoldingsValuer:
             currency = row["ZORIGINALCURRENCY"] or base
             amount = _dec(row["ZAMOUNT1"])
             if currency == base or row["ZORIGINALAMOUNT"] is None:
+                # Account currency (or no quantity stored): the amount is
+                # the quantity.
                 quantity = amount
-            elif row["ZNUMBEROFSHARES"]:
-                # The holding's own change, signed, and including the fee
-                # the sender paid in that currency (a withdrawal of 1 BTC
-                # with a 0.0001 BTC network fee moves 1.0001 BTC out).
-                quantity = _dec(row["ZNUMBEROFSHARES"])
             else:
-                # ZORIGINALAMOUNT's sign isn't consistent across transaction
-                # types (MoneyWiz 3 stores some incoming transfers with a
-                # negative original amount), so the direction is the sign of
-                # the account amount; with no amount, the original's sign.
+                # How much moved: the holding's own change (ZNUMBEROFSHARES)
+                # when set, because it includes the fee the sender paid in
+                # that currency (a withdrawal of 1 BTC with a 0.0001 BTC
+                # network fee moves 1.0001 BTC out); else the quantity sent.
                 original = _dec(row["ZORIGINALAMOUNT"])
-                quantity = abs(original)
+                shares = _dec(row["ZNUMBEROFSHARES"])
+                quantity = abs(shares) if shares else abs(original)
+                # Neither sign is trusted (MoneyWiz 3 stores some incoming
+                # transfers with a negative original amount): the direction
+                # is the sign of the account amount; with no amount, the
+                # original's sign.
                 if amount < 0 or (amount == 0 and original < 0):
                     quantity = -quantity
             bucket = quantities[pk]
