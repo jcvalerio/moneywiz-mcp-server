@@ -6,6 +6,10 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 
 ## Unreleased
 
+## 3.0.0 - 2026-11-08
+
+Major release that makes account balances match the MoneyWiz app for every account type and adds multi-currency cash planning. Investment, crypto and loan balances change for the same data, and one `get_commitments_ending_timeline` field changes type, so this is a major version under the [versioning policy](docs/RELEASING.md#versioning-policy).
+
 ### Added
 
 - `analyze_monthly_cash_flow`: a monthly cash view. For each calendar month and currency, it checks whether scheduled income covers what has to leave bank accounts: payments from bank accounts, loan payments, savings contributions, and what each credit card needs from the bank. Bills charged to a card count only as part of that card's payment.
@@ -21,10 +25,25 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
   - `analyze_salary_breakdown` adds the response fields `income_in_period`, `income_sources`, `commitments_by_kind`, `transfers_in_period`, `unclassified_transfers`, `display_currency`, `totals_in_display_currency`, `exchange_rates_used` and `currencies_without_rate`, plus `kind` on each commitment.
   - `coverage_analysis` can now be `unknown` (no income found) or `incomplete` (a currency has no exchange rate).
   - **Breaking:** in `get_commitments_ending_timeline`, `monthly_relief` and `total_monthly_relief` are now `{currency: amount}` maps instead of one float that mixed currencies. Relief is the amount of each payment, so it is no longer described as monthly.
-  - `get_scheduled_transactions` lists one-time schedules (`commitment_type: one_time`) and counts them in its summary.
+  - `get_scheduled_transactions` lists one-time schedules (`commitment_type: one_time`) and counts them in its summary, and adds `recurrence_interval` and `upcoming_dates` to each schedule.
+  - Accounts add `cash_balance`, `holdings_value` and `holdings_without_price`.
+- **Financial calculation changes:** Investment, Forex (crypto) and loan balances differ from 2.0.0 for the same data (see Fixed). The new values match the MoneyWiz app.
 - **Behavior changes:**
   - `salary_amount` without `salary_currency` returns an error when the currency can't be inferred from the schedules or the MoneyWiz base currency. It no longer assumes USD.
   - When `salary_amount` is omitted, income comes from the scheduled deposits. The old placeholder salary of 5000 is gone.
+  - Schedule duration unit codes `1` and `2` are no longer read as daily and weekly. They don't occur in MoneyWiz 3 databases; like any unknown code they fall back to monthly with a warning.
+- **Configuration changes:** none.
+
+### Upgrade notes
+
+- Source checkout: `git fetch --tags && git checkout v3.0.0 && uv sync --all-extras`, then restart Claude Desktop.
+- PyPI with `uvx`: change the pinned version to `moneywiz-mcp-server==3.0.0` and restart Claude Desktop.
+- If you read `monthly_relief` or `total_monthly_relief` from `get_commitments_ending_timeline`, expect a `{currency: amount}` map instead of a number.
+
+### Rollback
+
+- Source checkout: `git checkout v2.0.0 && uv sync --all-extras`.
+- PyPI with `uvx`: pin `moneywiz-mcp-server==2.0.0`.
 
 ### Fixed
 
@@ -38,6 +57,9 @@ This project follows semantic versioning where possible. See `docs/ROADMAP.md` a
 - One-time scheduled transactions were never loaded. Schedules that end ("after N repeats" or "on date") were treated as endless. Both are now counted correctly.
 - The MoneyWiz base currency is detected from the currency with the most rate-1 transactions. Rates are read from deposits, withdrawals and refunds only, because transfers store the rate between their two accounts.
 - Scheduled transactions split across several categories (for example a loan payment's principal, interest and insurance, or a subscription plus its tax) reported only one category, the first stored. `get_scheduled_transactions` and each commitment in `analyze_salary_breakdown` now include `category_splits` with every category and its amount, and `category` is the largest share.
+- Monthly and yearly schedules on the 29th–31st (or Feb 29) were silently dropped because their next date raised an error. Schedules that repeat every N months, weeks or days now use their interval, and day-based schedules (MoneyWiz stores weekly as every 7 or 14 days) are no longer treated as monthly.
+- Scheduled transactions on current MoneyWiz 3 databases all showed as "Uncategorized" or "Transfer", because the category lookup used a column name that contains a per-model entity id. Categories are now resolved without it.
+- `analyze_salary_breakdown` was rejected by Claude Desktop because two date fields had no UTC offset, which the tool's output schema requires. Every date in tool output now includes the offset.
 - The MCP handshake now reports the server's own version. It previously reported the `mcp` SDK's version (for example `1.30.0`) because FastMCP 1.x has no version setting.
 
 ## 2.0.0 - 2026-11-02
