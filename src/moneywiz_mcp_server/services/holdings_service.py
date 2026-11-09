@@ -11,7 +11,8 @@ only part of these accounts:
 
 - **Forex accounts** (crypto exchanges and wallets) hold several currencies.
   Each transaction carries the currency it moved (ZORIGINALCURRENCY) and the
-  quantity (ZORIGINALAMOUNT), while ZAMOUNT1 is its value in the account
+  quantity (ZORIGINALAMOUNT; ZNUMBEROFSHARES when set, which includes the
+  sender's fee), while ZAMOUNT1 is its value in the account
   currency when it happened, so summing ZAMOUNT1 says nothing about what is
   held now. The quantity per currency is the sum of the quantities moved
   plus exchanges between holdings; each currency is valued at the price of
@@ -167,7 +168,8 @@ class HoldingsValuer:
         exchange_ent = entity_map.get(EXCHANGE_ENTITY_NAME)
         placeholders = ",".join("?" for _ in accounts)
         rows = await self.db_manager.execute_query(
-            "SELECT ZACCOUNT2, Z_ENT, ZAMOUNT1, ZORIGINALCURRENCY, ZORIGINALAMOUNT "  # nosec B608 - placeholders only
+            "SELECT ZACCOUNT2, Z_ENT, ZAMOUNT1, ZORIGINALCURRENCY, ZORIGINALAMOUNT, "  # nosec B608 - placeholders only
+            "ZNUMBEROFSHARES "
             f"FROM ZSYNCOBJECT WHERE ZACCOUNT2 IN ({placeholders}) "
             "AND ZAMOUNT1 IS NOT NULL",
             tuple(accounts),
@@ -186,6 +188,11 @@ class HoldingsValuer:
             amount = _dec(row["ZAMOUNT1"])
             if currency == base or row["ZORIGINALAMOUNT"] is None:
                 quantity = amount
+            elif row["ZNUMBEROFSHARES"]:
+                # The holding's own change, signed, and including the fee
+                # the sender paid in that currency (a withdrawal of 1 BTC
+                # with a 0.0001 BTC network fee moves 1.0001 BTC out).
+                quantity = _dec(row["ZNUMBEROFSHARES"])
             else:
                 # ZORIGINALAMOUNT's sign isn't consistent across transaction
                 # types (MoneyWiz 3 stores some incoming transfers with a
