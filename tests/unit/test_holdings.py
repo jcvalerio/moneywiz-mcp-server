@@ -240,6 +240,28 @@ def make_db(path):
         ZORIGINALCURRENCY="BTC",
         ZORIGINALAMOUNT=-0.005,
     )
+    # An incoming transfer of 0.001 BTC whose shares are stored unsigned
+    # and whose original amount is negative: the direction is the amount's.
+    add(
+        Z_PK=224,
+        Z_ENT=45,
+        ZACCOUNT2=4,
+        ZAMOUNT1=100.0,
+        ZORIGINALCURRENCY="BTC",
+        ZORIGINALAMOUNT=-0.001,
+        ZNUMBEROFSHARES=-0.001,
+    )
+    # A withdrawal of 0.002 BTC whose sender paid a 0.0005 BTC network fee:
+    # the holding loses 0.0025 (ZNUMBEROFSHARES), not 0.002.
+    add(
+        Z_PK=223,
+        Z_ENT=46,
+        ZACCOUNT2=4,
+        ZAMOUNT1=-200.0,
+        ZORIGINALCURRENCY="BTC",
+        ZORIGINALAMOUNT=-0.002,
+        ZNUMBEROFSHARES=-0.0025,
+    )
     conn.commit()
     conn.close()
 
@@ -268,10 +290,11 @@ async def test_forex_accounts_are_valued_per_currency_held(db):
     assert 1 not in values
 
 
-async def test_swap_into_the_account_currency_credits_cash(db):
+async def test_swap_into_the_account_currency_credits_cash_and_fees_count(db):
     values = await HoldingsValuer(db).value_accounts()
-    # BTC: 0.02 - 0.01 - 0.005 = 0.005 x 100000 = 500; cash: 1000 USD.
-    assert values[4] == AccountValuation(Decimal("1000.0"), Decimal("500.0"), 0)
+    # BTC: 0.02 - 0.01 - 0.005 + 0.001 (in, despite negative stored signs)
+    # - 0.0025 (0.002 sent + 0.0005 fee) = 0.0035 x 100000 = 350; cash 1000.
+    assert values[4] == AccountValuation(Decimal("1000.0"), Decimal("350.0"), 0)
 
 
 async def test_unreadable_holdings_are_flagged(db, monkeypatch):
